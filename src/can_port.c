@@ -1,4 +1,4 @@
-#include "can_comm.h"
+#include "can_port.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -16,17 +16,16 @@
 #include <sys/socket.h>
 #include <net/if.h>
 
-#include <linux/can.h>
-#include <linux/can/raw.h>
-
-
-
 int can_init(struct can_port **pport)
 {
     struct can_port *port = malloc(sizeof(struct can_port));
     *pport = port;
 
     port->fd = -1;
+
+    port->write_index = 0;
+    port->write_buffer_size = 0;
+
     return 0;
 }
 
@@ -50,7 +49,7 @@ int can_open(struct can_port *can_port, char *interface_name)
 
   //open socket
   if ((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0)
-    return ERL_DRV_ERROR_ERRNO;
+    return s;
 
   int flags = fcntl(s, F_GETFL, 0);
   fcntl(s, F_SETFL, flags | O_NONBLOCK);

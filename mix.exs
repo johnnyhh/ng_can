@@ -3,15 +3,15 @@ defmodule Ng.Can.Mixfile do
 
   def project do
     [app: :ng_can,
-     name: "Ng.Can"
+     name: "Ng.Can",
      version: "0.1.0",
      elixir: "~> 1.4",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
      compilers: [:elixir_make] ++ Mix.compilers,
-     make_executable: make_executable(),
+     make_executable: :default,
      make_makefile: "Makefile",
-     make_error_message: make_error_message(),
+     make_error_message: :default,
      make_clean: ["clean"],
      deps: deps()
    ]

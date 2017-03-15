@@ -26,6 +26,20 @@ defmodule Ng.Can do
     {:ok, state}
   end
 
+  def handle_call({:open, name}, {from_pid, _}, state) do
+    response = call_port(state, :open, name)
+    {:reply, response, state}
+  end
+
+  #frames is a list of %{id: can_identifier, data: can_payload}
+  def handle_call({:write, frames}, {from_pid, _}, state) do
+    frames_with_len = Enum.map frames, fn frame ->
+      {frame[:id], frame[:data]}
+    end
+    response = call_port(state, :write, frames_with_len)
+    {:reply, response, state}
+  end
+
   def terminate(reason, state) do
     IO.puts "Going to terminate: #{inspect reason}"
     Port.close(state.port)
