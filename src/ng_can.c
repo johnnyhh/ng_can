@@ -53,40 +53,44 @@ static void send_error_response(const char *reason)
   erlcmd_send(resp, resp_index);
 }
 
+static canid_t parse_can_id(char* ptr)
+{
+    /* uint8_t* ptr = (uint8_t*) ptr; */
+    canid_t can_id = (ptr[0]<<24) | (ptr[1]<<16) | (ptr[2]<<8) | (ptr[3]<<0);
+    return can_id;
+}
+
 //request is an array of maps with keys {:id, :data, :data_size}
 static void handle_write(const char *req, int *req_index)
 {
-  if(can_port->write_buffer_size > 0)
-    send_error_response("buffer_full");
-
-  //populate can_port write-related fields
-  int num_frames;
-  if(ei_decode_list_header(req, req_index, &num_frames) < 0)
-    errx(EXIT_FAILURE, "Expecting a list of frames");
-
-  if(num_frames > MAX_WRITE_BUFFER)
-    send_error_response("too_many_frames");
-
-  for( int i = 0; i < num_frames; i++ ) {
     int num_tuple_elements;
-    if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0 || num_tuple_elements != 3)
-      errx(EXIT_FAILURE, "expecting 3 elements in frame tuple");
-    char id[32]; 
+    if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0 || num_tuple_elements != 2)
+      errx(EXIT_FAILURE, "expecting frame with format {frame_id, frame_id}");
+    char id[4]; 
     long id_len;
     if (ei_decode_binary(req, req_index, id, &id_len) < 0)
       errx(EXIT_FAILURE, "failed to extract frame id");
     long data_len;
-    char data[64];
-    if(ei_decode_binary(req, req_index, data, &data_len) < 0)
+    char data[8];
+    if(ei_decode_binary(req, req_index, data, &data_len) < 0 || data_len > 8)
       errx(EXIT_FAILURE, "failed to extract frame data");
 
     struct can_frame can_frame;
-    can_frame.can_id = id;
+    can_frame.can_id = parse_can_id(id);
     can_frame.can_dlc = data_len;
-    can_frame.data = data;
-    can_port->write_buffer[i] = can_frame;
-  }
-  send_ok_response();
+    memcpy(can_frame.data, data, data_len);
+
+    int write_result = can_write(can_port, &can_frame);
+    if(write_result >= 0) {
+      send_ok_response();
+    }
+    else if(errno == EAGAIN) {
+      send_error_response("buffer_full");
+    } else {
+      char buf[10];
+      sprintf(buf, "enosend%d", write_result);
+      errx(EXIT_FAILURE, buf);
+    }
 }
 
 static void handle_open(const char *req, int *req_index)
@@ -148,6 +152,14 @@ static void handle_elixir_request(const char *req, void *cookie)
 
 int main(int argc, char *argv[])
 {
+#ifdef DEBUG
+    char logfile[64];
+    sprintf(logfile, "nerves_can-%d.log", 1);
+    FILE *fp = fopen(logfile, "w+");
+    log_location = fp;
+
+    debug("Starting...");
+#endif
   if (can_init(&can_port) < 0)
     errx(EXIT_FAILURE, "uart_init failed");
 

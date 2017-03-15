@@ -22,7 +22,8 @@ defmodule NgCanTest do
   end
 
   test "write", %{can_port: port} do
-    assert :ok == GenServer.call(port, {:write, []})
+    frame = %{id: <<1 :: size(32)>>, data: <<1 :: size(64)>>}
+    assert :ok == GenServer.call(port, {:write, frame})
   end
 
 end

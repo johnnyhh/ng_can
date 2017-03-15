@@ -1,4 +1,5 @@
 #include "can_port.h"
+#include "util.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -22,9 +23,6 @@ int can_init(struct can_port **pport)
     *pport = port;
 
     port->fd = -1;
-
-    port->write_index = 0;
-    port->write_buffer_size = 0;
 
     return 0;
 }
@@ -65,4 +63,9 @@ int can_open(struct can_port *can_port, char *interface_name)
   addr.can_ifindex = ifr.ifr_ifindex;
 
   return bind(s, (struct sockaddr *)&addr, sizeof(addr));
+}
+
+int can_write(struct can_port *can_port, struct can_frame *can_frame)
+{
+  return write(can_port->fd, can_frame, sizeof(struct can_frame));
 }

@@ -32,11 +32,8 @@ defmodule Ng.Can do
   end
 
   #frames is a list of %{id: can_identifier, data: can_payload}
-  def handle_call({:write, frames}, {from_pid, _}, state) do
-    frames_with_len = Enum.map frames, fn frame ->
-      {frame[:id], frame[:data]}
-    end
-    response = call_port(state, :write, frames_with_len)
+  def handle_call({:write, frame}, {from_pid, _}, state) do
+    response = call_port(state, :write, {frame.id, frame.data})
     {:reply, response, state}
   end
 
