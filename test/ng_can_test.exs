@@ -20,6 +20,7 @@ defmodule NgCanTest do
   end
 
   setup do
+    :os.cmd('rm *.log')
     {:ok, can1} = Ng.Can.start_link()
     :ok == GenServer.call(can1, {:open, @can1_interface})
     {:ok, can2} = Ng.Can.start_link()
@@ -27,14 +28,33 @@ defmodule NgCanTest do
     {:ok, %{can1: can1, can2: can2}}
   end
 
-  test "write + read", %{can1: can1, can2: can2} do
-    foodata = <<97,97,97,97,97,97,97,97>>
-    fooid = <<1, 2, 3, 4>>
-    frame = %{id: fooid, data: foodata}
-    :ok = GenServer.call(can1, {:write, frame})
-    assert {:error, :nodata} == GenServer.call(can1, :read)
-    {:ok, {id, recvd_data}} = GenServer.call(can2, :read)
-    assert recvd_data == foodata
+  # test "write + read", %{can1: can1, can2: can2} do
+  #   foodata = <<97,97,97,97,97,97,97,97>>
+  #   <<fooid::size(32)>> = <<1, 2, 3, 4>>
+  #   frame = %{id: fooid, data: foodata}
+  #   :ok = GenServer.call(can1, {:write, [frame]})
+  #   assert {:error, :nodata} == GenServer.call(can1, :read)
+  #   {:ok, {id, recvd_data}} = GenServer.call(can2, :read)
+  #   assert recvd_data == foodata
+  #   assert {:error, :nodata} == GenServer.call(can2, :read)
+  # end
+
+  test "write + await", %{can1: can1, can2: can2} do
+    <<id1::size(32)>> = <<1, 2, 3, 4>>
+    <<id2::size(32)>> = <<4, 3, 2, 1>>
+    frame1 = %{id: id1, data: <<97,97,97,97,97,97,97,97>>}
+    frame2 = %{id: id2, data: <<98,98,98,98,98,98,98,98>>}
+    :ok = GenServer.call(can1, {:write, [frame1, frame2]})
+    :ok = GenServer.call(can2, :await_read)
+    receive do
+      {:can_frames, _foobar, [rf1, rf2]} ->
+        assert rf1 == frame1
+        assert rf2 == frame2
+      other ->
+        raise("wrong msg recvd: #{inspect other}")
+    after
+      1000 -> raise "await data timed out"
+    end
   end
 
 end

@@ -7,6 +7,8 @@ defmodule Ng.Can do
     @moduledoc false
     defstruct [
       port: nil,                   # C port process
+      controlling_process: nil,
+      interface: nil
     ]
   end
 
@@ -26,19 +28,42 @@ defmodule Ng.Can do
     {:ok, state}
   end
 
-  def handle_call({:open, name}, {from_pid, _}, state) do
-    response = call_port(state, :open, name)
-    {:reply, response, state}
+  #notification stuff
+  def handle_info({_, {:data, <<?n, message::binary>>}}, state) do
+    {:notif, frames} = :erlang.binary_to_term(message)
+    frames
+    |> Enum.map(fn {id, data} -> %{id: id, data: data} end)
+    |> send_frames(state)
+  end
+
+  defp send_frames(frames, state) do
+    if state.controlling_process do
+      send(state.controlling_process, {:can_frames, state.interface, frames})
+    end
+    {:noreply, state}
+  end
+
+  def handle_call({:open, interface}, {from_pid, _}, state) do
+    response = call_port(state, :open, interface)
+    {:reply, response, %{state | controlling_process: from_pid, interface: interface}}
   end
 
   #frames is a list of %{id: can_identifier, data: can_payload}
-  def handle_call({:write, frame}, {from_pid, _}, state) do
-    response = call_port(state, :write, {frame.id, frame.data})
+  def handle_call({:write, frames}, {from_pid, _}, state) do
+    formatted_frames = Enum.map frames, fn frame ->
+      {frame.id, frame.data}
+    end
+    response = call_port(state, :write, formatted_frames)
     {:reply, response, state}
   end
 
   def handle_call(:read, {from_pid, _}, state) do
     response = call_port(state, :read, nil)
+    {:reply, response, state}
+  end
+
+  def handle_call(:await_read, {from_pid, _}, state) do
+    response = call_port(state, :await_read, nil)
     {:reply, response, state}
   end
 

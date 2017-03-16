@@ -24,6 +24,15 @@ int can_init(struct can_port **pport)
 
     port->fd = -1;
 
+    //write buffer stuff
+    port->write_buffer_offset = 0;
+    port->write_buffer_size = 0;
+    port->write_buffer = NULL;
+
+    //read buffer stuff
+    port->awaiting_read = 0;
+    port->read_buffer = NULL;
+
     return 0;
 }
 
@@ -62,6 +71,13 @@ int can_open(struct can_port *can_port, char *interface_name)
   addr.can_family = AF_CAN;
   addr.can_ifindex = ifr.ifr_ifindex;
 
+  /* int sendbuff_len; */
+  /* socklen_t optlen = sizeof(sendbuff_len); */
+  /* getsockopt(s, SOL_SOCKET, SO_SNDBUF, &sendbuff_len, &optlen); */
+  /* char buf[10]; */
+  /* sprintf(buf, "ss:%d", sendbuff_len); */
+  /* debug(buf); */
+
   return bind(s, (struct sockaddr *)&addr, sizeof(addr));
 }
 
@@ -73,4 +89,17 @@ int can_write(struct can_port *can_port, struct can_frame *can_frame)
 int can_read(struct can_port *can_port, struct can_frame *can_frame)
 {
   return read(can_port->fd, can_frame, sizeof(struct can_frame));
+}
+
+int can_notify_read(struct can_port *can_port)
+{
+  size_t len = sizeof(struct sockaddr_can);
+  int num_read;
+
+  for(num_read = 0; num_read < 100; num_read++){
+    int res = read(can_port->fd, can_port->read_buffer + (len * num_read), len);
+    if(res < 0)
+      break;
+  }
+  return num_read;
 }

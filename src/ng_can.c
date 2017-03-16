@@ -53,44 +53,69 @@ static void send_error_response(const char *reason)
   erlcmd_send(resp, resp_index);
 }
 
-static canid_t parse_can_id(char* ptr)
+static struct can_frame parse_can_frame(const char *req, int *req_index)
 {
-    /* uint8_t* ptr = (uint8_t*) ptr; */
-    canid_t can_id = (ptr[0]<<24) | (ptr[1]<<16) | (ptr[2]<<8) | (ptr[3]<<0);
-    return can_id;
-}
-
-//request is an array of maps with keys {:id, :data, :data_size}
-static void handle_write(const char *req, int *req_index)
-{
+    struct can_frame can_frame;
     int num_tuple_elements;
     if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0 || num_tuple_elements != 2)
       errx(EXIT_FAILURE, "expecting frame with format {frame_id, frame_id}");
-    char id[4]; 
-    long id_len;
-    if (ei_decode_binary(req, req_index, id, &id_len) < 0)
+    unsigned long id;
+    if (ei_decode_ulong(req, req_index, &id) < 0)
       errx(EXIT_FAILURE, "failed to extract frame id");
     long data_len;
     char data[8];
     if(ei_decode_binary(req, req_index, data, &data_len) < 0 || data_len > 8)
       errx(EXIT_FAILURE, "failed to extract frame data");
 
-    struct can_frame can_frame;
-    can_frame.can_id = parse_can_id(id);
+    can_frame.can_id = id;
     can_frame.can_dlc = data_len;
     memcpy(can_frame.data, data, data_len);
+    return can_frame;
+}
 
+static int write_buffer(const char *req, int *req_index, int num_frames)
+{
+  for (int i = 0; i < num_frames; i++) {
+    int start_index = *req_index;
+    struct can_frame can_frame = parse_can_frame(req, req_index);
     int write_result = can_write(can_port, &can_frame);
-    if(write_result >= 0) {
-      send_ok_response();
+
+    if(write_result < 0 && errno == EAGAIN) {
+      //enqueue the remaining frames
+      int num_unsent = num_frames - i;
+      can_port->write_buffer_offset = 0;
+      can_port->write_buffer_size = num_unsent;
+      int frame_size = *req_index - start_index;
+      int num_bytes = frame_size * num_unsent;
+      char *buffer = malloc(num_bytes);
+      memcpy(buffer, req + start_index, num_bytes);
+      free(can_port->write_buffer);
+      can_port->write_buffer = buffer;
+      return -1;
+    } else if(write_result < 0) {
+      errx(EXIT_FAILURE, "write error");
     }
-    else if(errno == EAGAIN) {
-      send_error_response("buffer_full");
-    } else {
-      char buf[10];
-      sprintf(buf, "enosend%d", write_result);
-      errx(EXIT_FAILURE, buf);
-    }
+  }
+  return 0;
+}
+
+//request is an array of maps with keys {:id, :data, :data_size}
+static void handle_write(const char *req, int *req_index)
+{
+  int num_frames;
+  if(ei_decode_list_header(req, req_index, &num_frames) < 0)
+    errx(EXIT_FAILURE, "expecting a list of frames");
+  write_buffer(req, req_index, num_frames);
+  send_ok_response();
+}
+
+static void process_write_buffer()
+{
+  if(write_buffer(can_port->write_buffer, &(can_port->write_buffer_offset), can_port->write_buffer_size) == 0){
+    free(can_port->write_buffer);
+    can_port->write_buffer_size = 0;
+    can_port->write_buffer_offset = 0;
+  }
 }
 
 static void handle_open(const char *req, int *req_index)
@@ -115,6 +140,14 @@ static void handle_open(const char *req, int *req_index)
   }
 }
 
+static void encode_can_frame(char *resp, int *resp_index, struct can_frame *can_frame)
+{
+  ei_encode_tuple_header(resp, resp_index, 2);
+  ei_encode_ulong(resp, resp_index, (unsigned long) can_frame->can_id);
+  //REVIEW: is it necessary to buffer this binary if it's under 8 bytes?
+  ei_encode_binary(resp, resp_index, can_frame->data, 8);
+}
+
 static void handle_read(const char *req, int *req_index)
 {
   struct can_frame can_frame;
@@ -128,10 +161,7 @@ static void handle_read(const char *req, int *req_index)
     ei_encode_version(resp, &resp_index);
     ei_encode_tuple_header(resp, &resp_index, 2);
     ei_encode_atom(resp, &resp_index, "ok");
-    ei_encode_tuple_header(resp, &resp_index, 2);
-    ei_encode_ulong(resp, &resp_index, (unsigned long) can_frame.can_id);
-    //REVIEW: is it necessary to buffer this binary if it's under 8 bytes?
-    ei_encode_binary(resp, &resp_index, can_frame.data, 8);
+    encode_can_frame(resp, &resp_index, &can_frame);
     erlcmd_send(resp, resp_index);
     free(resp);
   } else if (bytes_read > 0) {
@@ -144,9 +174,44 @@ static void handle_read(const char *req, int *req_index)
   }
 }
 
+static void handle_await_read(const char *req, int *req_index)
+{
+  if(can_port->awaiting_read == 1)
+    send_error_response("busy");
+  else
+    can_port->awaiting_read = 1;
+    send_ok_response();
+}
+
+static void notify_read()
+{
+  can_port->read_buffer = malloc(100 * sizeof(struct can_frame));
+  int num_frames = can_notify_read(can_port);
+  //since each encoded frame has overhead, this 32 probably isn't enough
+  //for large messages. let's get an exact amount...
+  char *resp = malloc(32 + (num_frames * sizeof(struct can_frame)));
+  int resp_index = sizeof(uint16_t);
+  resp[resp_index++] = notification_id;
+  ei_encode_version(resp, &resp_index);
+  ei_encode_tuple_header(resp, &resp_index, 2);
+  ei_encode_atom(resp, &resp_index, "notif");
+  struct can_frame *cur_frame = can_port->read_buffer;
+  ei_encode_list_header(resp, &resp_index, num_frames);
+  for (int i = 0; i < num_frames; i++) {
+    struct can_frame *cur_frame = can_port->read_buffer + (i * sizeof(struct can_frame));
+    encode_can_frame(resp, &resp_index, cur_frame);
+  }
+  ei_encode_empty_list(resp, &resp_index);
+  erlcmd_send(resp, resp_index);
+  free(resp);
+  free(can_port->read_buffer);
+  can_port->awaiting_read = 0;
+}
+
 static struct request_handler request_handlers[] = {
-  { "read", handle_read },
+  { "await_read", handle_await_read },
   { "write", handle_write },
+  { "read", handle_read },
   { "open", handle_open },
   { NULL, NULL }
 };
@@ -197,12 +262,26 @@ int main(int argc, char *argv[])
 
   for (;;) {
     struct pollfd fdset[3];
+    int num_listeners = 1;
 
     fdset[0].fd = STDIN_FILENO;
     fdset[0].events = POLLIN;
     fdset[0].revents = 0;
 
-    int rc = poll(fdset, 1, -1);
+    fdset[1].fd = can_port->fd;
+    fdset[1].revents = 0;
+
+    if(can_port->write_buffer_size > 0) {
+      num_listeners = 2;
+      fdset[1].events = POLLOUT;
+    }
+
+    if(can_port->awaiting_read == 1) {
+      num_listeners = 2;
+      fdset[1].events |= POLLIN;
+    }
+
+    int rc = poll(fdset, num_listeners, -1);
     if (rc < 0) {
       // Retry if EINTR
       if (errno == EINTR)
@@ -214,6 +293,14 @@ int main(int argc, char *argv[])
     if (fdset[0].revents & (POLLIN | POLLHUP)) {
       if (erlcmd_process(handler))
         break;
+    }
+    //ready to work through write buffer
+    if (fdset[1].revents & POLLOUT) {
+      process_write_buffer();
+    }
+
+    if (fdset[1].revents & POLLIN) {
+      notify_read();
     }
   }
 
