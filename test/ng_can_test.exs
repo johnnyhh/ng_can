@@ -26,4 +26,8 @@ defmodule NgCanTest do
     assert :ok == GenServer.call(port, {:write, frame})
   end
 
+  test "read", %{can_port: port} do
+    assert {:error, :nodata} == GenServer.call(port, :read)
+  end
+
 end

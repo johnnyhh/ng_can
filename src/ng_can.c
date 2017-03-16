@@ -105,7 +105,6 @@ static void handle_open(const char *req, int *req_index)
   //REVIEW: is this necessary?
   interface_name[binary_len] = '\0';
 
-  // If the uart was already open, close and open it again
   if (can_is_open(can_port))
     can_close(can_port);
 
@@ -116,7 +115,37 @@ static void handle_open(const char *req, int *req_index)
   }
 }
 
+static void handle_read(const char *req, int *req_index)
+{
+  struct can_frame can_frame;
+  int bytes_read = can_read(can_port, &can_frame);
+  if(bytes_read > 0 && (size_t) bytes_read >= sizeof(struct can_frame)) {
+    //REVIEW: How did fhunleth determine the ammount of additional memory to alloc?
+    //not really clear from :ei docs how large all the various headers are
+    char *resp = malloc(32 + bytes_read);
+    int resp_index = sizeof(uint16_t);
+    resp[resp_index++] = response_id;
+    ei_encode_version(resp, &resp_index);
+    ei_encode_tuple_header(resp, &resp_index, 2);
+    ei_encode_atom(resp, &resp_index, "ok");
+    ei_encode_tuple_header(resp, &resp_index, 2);
+    ei_encode_ulong(resp, &resp_index, (unsigned long) can_frame.can_id);
+    //REVIEW: is it necessary to buffer this binary if it's under 8 bytes?
+    ei_encode_binary(resp, &resp_index, can_frame.data, 8);
+    erlcmd_send(resp, resp_index);
+    free(resp);
+  } else if(errno == EAGAIN) {
+    send_error_response("nodata");
+  } else if (bytes_read > 0) {
+    send_error_response("partialframe");
+  }
+  else {
+    errx(EXIT_FAILURE, "failed to read from can device");
+  }
+}
+
 static struct request_handler request_handlers[] = {
+  { "read", handle_read },
   { "write", handle_write },
   { "open", handle_open },
   { NULL, NULL }

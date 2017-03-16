@@ -69,3 +69,8 @@ int can_write(struct can_port *can_port, struct can_frame *can_frame)
 {
   return write(can_port->fd, can_frame, sizeof(struct can_frame));
 }
+
+int can_read(struct can_port *can_port, struct can_frame *can_frame)
+{
+  return read(can_port->fd, can_frame, sizeof(struct can_frame));
+}

@@ -22,3 +22,5 @@ int can_init(struct can_port **pport);
 int can_close(struct can_port *port);
 
 int can_write(struct can_port *can_port, struct can_frame *can_frame);
+
+int can_read(struct can_port *can_port, struct can_frame *can_frame);

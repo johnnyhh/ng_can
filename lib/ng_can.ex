@@ -37,6 +37,11 @@ defmodule Ng.Can do
     {:reply, response, state}
   end
 
+  def handle_call(:read, {from_pid, _}, state) do
+    response = call_port(state, :read, nil)
+    {:reply, response, state}
+  end
+
   def terminate(reason, state) do
     IO.puts "Going to terminate: #{inspect reason}"
     Port.close(state.port)
