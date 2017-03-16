@@ -134,10 +134,10 @@ static void handle_read(const char *req, int *req_index)
     ei_encode_binary(resp, &resp_index, can_frame.data, 8);
     erlcmd_send(resp, resp_index);
     free(resp);
-  } else if(errno == EAGAIN) {
-    send_error_response("nodata");
   } else if (bytes_read > 0) {
     send_error_response("partialframe");
+  } else if(errno == EAGAIN) {
+    send_error_response("nodata");
   }
   else {
     errx(EXIT_FAILURE, "failed to read from can device");
@@ -183,14 +183,14 @@ int main(int argc, char *argv[])
 {
 #ifdef DEBUG
     char logfile[64];
-    sprintf(logfile, "nerves_can-%d.log", 1);
+    sprintf(logfile, "ng_can-%d.log", (int) getpid());
     FILE *fp = fopen(logfile, "w+");
     log_location = fp;
 
     debug("Starting...");
 #endif
   if (can_init(&can_port) < 0)
-    errx(EXIT_FAILURE, "uart_init failed");
+    errx(EXIT_FAILURE, "can_init failed");
 
   struct erlcmd *handler = malloc(sizeof(struct erlcmd));
   erlcmd_init(handler, handle_elixir_request, NULL);
