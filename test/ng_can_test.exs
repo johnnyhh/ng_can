@@ -43,13 +43,14 @@ defmodule NgCanTest do
     <<id1::size(32)>> = <<1, 2, 3, 4>>
     <<id2::size(32)>> = <<4, 3, 2, 1>>
     frame1 = %{id: id1, data: <<97,97,97,97,97,97,97,97>>}
-    frame2 = %{id: id2, data: <<98,98,98,98,98,98,98,98>>}
+    #pad short frames
+    frame2 = %{id: id2, data: <<98,98,98,98,98,98,98>>}
     :ok = GenServer.call(can1, {:write, [frame1, frame2]})
     :ok = GenServer.call(can2, :await_read)
     receive do
       {:can_frames, _foobar, [rf1, rf2]} ->
         assert rf1 == frame1
-        assert rf2 == frame2
+        assert rf2 == %{frame2 | data: frame2.data <> <<0>>}
       other ->
         raise("wrong msg recvd: #{inspect other}")
     after

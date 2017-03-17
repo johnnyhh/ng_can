@@ -63,13 +63,13 @@ static struct can_frame parse_can_frame(const char *req, int *req_index)
     if (ei_decode_ulong(req, req_index, &id) < 0)
       errx(EXIT_FAILURE, "failed to extract frame id");
     long data_len;
-    char data[8];
+    char data[8] = "";
     if(ei_decode_binary(req, req_index, data, &data_len) < 0 || data_len > 8)
-      errx(EXIT_FAILURE, "failed to extract frame data");
+      errx(EXIT_FAILURE, "failed to extract frame data:%s", data);
 
     can_frame.can_id = id;
     can_frame.can_dlc = data_len;
-    memcpy(can_frame.data, data, data_len);
+    memcpy(can_frame.data, data, 8);
     return can_frame;
 }
 
@@ -140,21 +140,12 @@ static void handle_open(const char *req, int *req_index)
   }
 }
 
-static void encode_can_frame(char *resp, int *resp_index, struct can_frame *can_frame)
-{
-  ei_encode_tuple_header(resp, resp_index, 2);
-  ei_encode_ulong(resp, resp_index, (unsigned long) can_frame->can_id);
-  //REVIEW: is it necessary to buffer this binary if it's under 8 bytes?
-  ei_encode_binary(resp, resp_index, can_frame->data, 8);
-}
-
+//TODO:convert to list
 static void handle_read(const char *req, int *req_index)
 {
   struct can_frame can_frame;
   int bytes_read = can_read(can_port, &can_frame);
   if(bytes_read > 0 && (size_t) bytes_read >= sizeof(struct can_frame)) {
-    //REVIEW: How did fhunleth determine the ammount of additional memory to alloc?
-    //not really clear from :ei docs how large all the various headers are
     char *resp = malloc(32 + bytes_read);
     int resp_index = sizeof(uint16_t);
     resp[resp_index++] = response_id;
@@ -185,25 +176,16 @@ static void handle_await_read(const char *req, int *req_index)
 
 static void notify_read()
 {
-  can_port->read_buffer = malloc(100 * sizeof(struct can_frame));
-  int num_frames = can_notify_read(can_port);
-  //since each encoded frame has overhead, this 32 probably isn't enough
-  //for large messages. let's get an exact amount...
-  char *resp = malloc(32 + (num_frames * sizeof(struct can_frame)));
+  //each can frame is ENCODED_FRAME_SIZE, add 32 (not exactly calculated) for headers + other stuff
+  can_port->read_buffer = malloc(32 + (MAX_READBUF * ENCODED_FRAME_SIZE));
   int resp_index = sizeof(uint16_t);
-  resp[resp_index++] = notification_id;
-  ei_encode_version(resp, &resp_index);
-  ei_encode_tuple_header(resp, &resp_index, 2);
-  ei_encode_atom(resp, &resp_index, "notif");
-  struct can_frame *cur_frame = can_port->read_buffer;
-  ei_encode_list_header(resp, &resp_index, num_frames);
-  for (int i = 0; i < num_frames; i++) {
-    struct can_frame *cur_frame = can_port->read_buffer + (i * sizeof(struct can_frame));
-    encode_can_frame(resp, &resp_index, cur_frame);
-  }
-  ei_encode_empty_list(resp, &resp_index);
-  erlcmd_send(resp, resp_index);
-  free(resp);
+  can_port->read_buffer[resp_index++] = notification_id;
+  ei_encode_version(can_port->read_buffer, &resp_index);
+  ei_encode_tuple_header(can_port->read_buffer, &resp_index, 2);
+  ei_encode_atom(can_port->read_buffer, &resp_index, "notif");
+  can_read_into_buffer(can_port, &resp_index);
+  ei_encode_empty_list(can_port->read_buffer, &resp_index);
+  erlcmd_send(can_port->read_buffer, resp_index);
   free(can_port->read_buffer);
   can_port->awaiting_read = 0;
 }

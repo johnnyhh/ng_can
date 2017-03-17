@@ -4,6 +4,8 @@
 
 #include <linux/can.h>
 #include <linux/can/raw.h>
+#define MAX_READBUF 100
+#define ENCODED_FRAME_SIZE 25
 
 struct can_port {
     // CAN file handle
@@ -16,7 +18,7 @@ struct can_port {
     int write_buffer_offset;
 
     //read buffer stuff
-    struct can_frame *read_buffer;
+    char *read_buffer;
     int awaiting_read;
 };
 
@@ -32,4 +34,6 @@ int can_write(struct can_port *can_port, struct can_frame *can_frame);
 
 int can_read(struct can_port *can_port, struct can_frame *can_frame);
 
-int can_notify_read(struct can_port *can_port);
+int can_read_into_buffer(struct can_port *can_port, int *resp_index);
+
+void encode_can_frame(char *resp, int *resp_index, struct can_frame *can_frame);

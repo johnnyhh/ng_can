@@ -1,5 +1,6 @@
 #include "can_port.h"
 #include "util.h"
+#include "erlcmd.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -71,13 +72,6 @@ int can_open(struct can_port *can_port, char *interface_name)
   addr.can_family = AF_CAN;
   addr.can_ifindex = ifr.ifr_ifindex;
 
-  /* int sendbuff_len; */
-  /* socklen_t optlen = sizeof(sendbuff_len); */
-  /* getsockopt(s, SOL_SOCKET, SO_SNDBUF, &sendbuff_len, &optlen); */
-  /* char buf[10]; */
-  /* sprintf(buf, "ss:%d", sendbuff_len); */
-  /* debug(buf); */
-
   return bind(s, (struct sockaddr *)&addr, sizeof(addr));
 }
 
@@ -86,20 +80,31 @@ int can_write(struct can_port *can_port, struct can_frame *can_frame)
   return write(can_port->fd, can_frame, sizeof(struct can_frame));
 }
 
+//TODO: dynamically encoded response with ei_x?
+void encode_can_frame(char *resp, int *resp_index, struct can_frame *can_frame)
+{
+  ei_encode_list_header(resp, resp_index, 1);
+  ei_encode_tuple_header(resp, resp_index, 2);
+  ei_encode_ulong(resp, resp_index, (unsigned long) can_frame->can_id);
+  //REVIEW: is it necessary to buffer this binary if it's under 8 bytes?
+  ei_encode_binary(resp, resp_index, can_frame->data, 8);
+}
+
 int can_read(struct can_port *can_port, struct can_frame *can_frame)
 {
   return read(can_port->fd, can_frame, sizeof(struct can_frame));
 }
 
-int can_notify_read(struct can_port *can_port)
+int can_read_into_buffer(struct can_port *can_port, int *resp_index)
 {
-  size_t len = sizeof(struct sockaddr_can);
   int num_read;
+  struct can_frame can_frame;
 
-  for(num_read = 0; num_read < 100; num_read++){
-    int res = read(can_port->fd, can_port->read_buffer + (len * num_read), len);
-    if(res < 0)
-      break;
+  for(num_read = 0; num_read < MAX_READBUF; num_read++){
+    int res = read(can_port->fd, &can_frame, sizeof(struct can_frame));
+    if(res <= 0)
+      return res;
+    encode_can_frame(can_port->read_buffer, resp_index, &can_frame);
   }
-  return num_read;
+  return 0;
 }
