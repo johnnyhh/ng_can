@@ -16,8 +16,11 @@ defmodule Ng.Can do
     GenServer.start_link(__MODULE__, [], opts)
   end
 
-  def write(pid, frames) do
+  def write(pid, frames) when is_list(frames) do
     GenServer.call(pid, {:write, frames})
+  end
+  def write(pid, frames) do
+    write(pid, [frames])
   end
 
   def open(pid, name) do
