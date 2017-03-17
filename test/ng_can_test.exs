@@ -22,9 +22,9 @@ defmodule NgCanTest do
   setup do
     :os.cmd('rm *.log')
     {:ok, can1} = Ng.Can.start_link()
-    :ok == GenServer.call(can1, {:open, @can1_interface})
+    :ok == Ng.Can.open(can1, @can1_interface)
     {:ok, can2} = Ng.Can.start_link()
-    :ok == GenServer.call(can2, {:open, @can2_interface})
+    :ok == Ng.Can.open(can2, @can2_interface)
     {:ok, %{can1: can1, can2: can2}}
   end
 
@@ -45,8 +45,8 @@ defmodule NgCanTest do
     frame1 = %{id: id1, data: <<97,97,97,97,97,97,97,97>>}
     #pad short frames
     frame2 = %{id: id2, data: <<98,98,98,98,98,98,98>>}
-    :ok = GenServer.call(can1, {:write, [frame1, frame2]})
-    :ok = GenServer.call(can2, :await_read)
+    :ok = Ng.Can.write(can1, [frame1, frame2])
+    :ok = Ng.Can.await_read(can2)
     receive do
       {:can_frames, _foobar, [rf1, rf2]} ->
         assert rf1 == frame1

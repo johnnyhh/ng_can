@@ -16,6 +16,18 @@ defmodule Ng.Can do
     GenServer.start_link(__MODULE__, [], opts)
   end
 
+  def write(pid, frames) do
+    GenServer.call(pid, {:write, frames})
+  end
+
+  def open(pid, name) do
+    GenServer.call(pid, {:open, name})
+  end
+
+  def await_read(pid) do
+    GenServer.call(pid, :await_read)
+  end
+
   def init(_args) do
     executable = :code.priv_dir(:ng_can) ++ '/ng_can'
     port = Port.open({:spawn_executable, executable},
