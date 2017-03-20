@@ -68,6 +68,10 @@ int can_open(struct can_port *can_port, char *interface_name)
   strcpy(ifr.ifr_name, interface_name);
   ioctl(s, SIOCGIFINDEX, &ifr);
 
+  //add busoff error filter
+  can_err_mask_t err_mask = CAN_ERR_BUSOFF;
+  setsockopt(s, SOL_CAN_RAW, CAN_RAW_ERR_FILTER, &err_mask, sizeof(err_mask));
+
   //bind
   addr.can_family = AF_CAN;
   addr.can_ifindex = ifr.ifr_ifindex;

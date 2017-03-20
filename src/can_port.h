@@ -4,6 +4,7 @@
 
 #include <linux/can.h>
 #include <linux/can/raw.h>
+#include <linux/can/error.h>
 #define MAX_READBUF 100
 #define ENCODED_FRAME_SIZE 25
 
