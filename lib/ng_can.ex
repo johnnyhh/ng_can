@@ -1,5 +1,6 @@
 defmodule Ng.Can do
   use GenServer
+  require Logger
   @moduledoc """
   Documentation for NgCan.
   """
@@ -7,13 +8,17 @@ defmodule Ng.Can do
     @moduledoc false
     defstruct [
       port: nil,                   # C port process
-      controlling_process: nil,
+      awaiting_process: nil,
       interface: nil
     ]
   end
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, [], opts)
+  end
+
+  def start(opts \\ []) do
+    GenServer.start(__MODULE__, [], opts)
   end
 
   def write(pid, frames) when is_list(frames) do
@@ -46,29 +51,24 @@ defmodule Ng.Can do
   #notification stuff
   def handle_info({_, {:data, <<?n, message::binary>>}}, state) do
     {:notif, frames} = :erlang.binary_to_term(message)
-    frames
-    |> Enum.map(fn {id, data} -> %{id: id, data: data} end)
-    |> send_frames(state)
+    send_frames(frames, state)
   end
 
   defp send_frames(frames, state) do
-    if state.controlling_process do
-      send(state.controlling_process, {:can_frames, state.interface, frames})
+    if state.awaiting_process do
+      send(state.awaiting_process, {:can_frames, state.interface, frames})
     end
     {:noreply, state}
   end
 
   def handle_call({:open, interface}, {from_pid, _}, state) do
     response = call_port(state, :open, interface)
-    {:reply, response, %{state | controlling_process: from_pid, interface: interface}}
+    {:reply, response, %{state | interface: interface}}
   end
 
-  #frames is a list of %{id: can_identifier, data: can_payload}
+  #frames is a list of tuples {can_identifier, can_payload}
   def handle_call({:write, frames}, {from_pid, _}, state) do
-    formatted_frames = Enum.map frames, fn frame ->
-      {frame.id, frame.data}
-    end
-    response = call_port(state, :write, formatted_frames)
+    response = call_port(state, :write, frames)
     {:reply, response, state}
   end
 
@@ -79,11 +79,11 @@ defmodule Ng.Can do
 
   def handle_call(:await_read, {from_pid, _}, state) do
     response = call_port(state, :await_read, nil)
-    {:reply, response, state}
+    {:reply, response, %{state | awaiting_process: from_pid}}
   end
 
   def terminate(reason, state) do
-    IO.puts "Going to terminate: #{inspect reason}"
+    Logger.info "terminating with reason: #{reason}"
     Port.close(state.port)
   end
 

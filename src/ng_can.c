@@ -58,14 +58,14 @@ static struct can_frame parse_can_frame(const char *req, int *req_index)
     struct can_frame can_frame;
     int num_tuple_elements;
     if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0 || num_tuple_elements != 2)
-      errx(EXIT_FAILURE, "expecting frame with format {frame_id, frame_id}");
+      send_error_response("badtuple");
     unsigned long id;
     if (ei_decode_ulong(req, req_index, &id) < 0)
-      errx(EXIT_FAILURE, "failed to extract frame id");
+      send_error_response("badcanid");
     long data_len;
     char data[8] = "";
     if(ei_decode_binary(req, req_index, data, &data_len) < 0 || data_len > 8)
-      errx(EXIT_FAILURE, "failed to extract frame data:%s", data);
+      send_error_response("badcandata");
 
     can_frame.can_id = id;
     can_frame.can_dlc = data_len;
@@ -93,7 +93,7 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
       can_port->write_buffer = buffer;
       return -1;
     } else if(write_result < 0) {
-      errx(EXIT_FAILURE, "write error");
+      send_error_response("badwriteres");
     }
   }
   return 0;
@@ -104,7 +104,7 @@ static void handle_write(const char *req, int *req_index)
 {
   int num_frames;
   if(ei_decode_list_header(req, req_index, &num_frames) < 0)
-    errx(EXIT_FAILURE, "expecting a list of frames");
+    send_error_response("expectinglist");
   write_buffer(req, req_index, num_frames);
   send_ok_response();
 }
@@ -167,11 +167,13 @@ static void handle_read(const char *req, int *req_index)
 
 static void handle_await_read(const char *req, int *req_index)
 {
-  if(can_port->awaiting_read == 1)
+  if(can_port->awaiting_read == 1){
     send_error_response("busy");
-  else
+  }
+  else {
     can_port->awaiting_read = 1;
     send_ok_response();
+  }
 }
 
 static void notify_read()
@@ -230,11 +232,12 @@ int main(int argc, char *argv[])
 {
 #ifdef DEBUG
     char logfile[64];
-    sprintf(logfile, "ng_can-%d.log", (int) getpid());
+    /* sprintf(logfile, "ng_can-%d.log", (int) getpid()); */
+    sprintf(logfile, "/root/logs/ng_can.log", (int) getpid());
     FILE *fp = fopen(logfile, "w+");
     log_location = fp;
 
-    debug("Starting...");
+    debug("Starting!");
 #endif
   if (can_init(&can_port) < 0)
     errx(EXIT_FAILURE, "can_init failed");
@@ -269,7 +272,8 @@ int main(int argc, char *argv[])
       if (errno == EINTR)
         continue;
 
-      err(EXIT_FAILURE, "poll");
+      debug("exiting due to error");
+      errx(EXIT_FAILURE, "poll");
     }
 
     if (fdset[0].revents & (POLLIN | POLLHUP)) {

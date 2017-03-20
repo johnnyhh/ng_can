@@ -102,8 +102,12 @@ int can_read_into_buffer(struct can_port *can_port, int *resp_index)
 
   for(num_read = 0; num_read < MAX_READBUF; num_read++){
     int res = read(can_port->fd, &can_frame, sizeof(struct can_frame));
-    if(res <= 0)
-      return res;
+    if(res <= 0){
+      if(errno == EAGAIN)
+        return 0;
+      else
+        return res;
+    }
     encode_can_frame(can_port->read_buffer, resp_index, &can_frame);
   }
   return 0;
