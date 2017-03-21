@@ -48,10 +48,15 @@ defmodule Ng.Can do
     {:ok, state}
   end
 
-  #notification stuff
+  #port communication
   def handle_info({_, {:data, <<?n, message::binary>>}}, state) do
     {:notif, frames} = :erlang.binary_to_term(message)
     send_frames(frames, state)
+  end
+
+  def handle_info({_, {:exit_status, status}}, state) do
+    Logger.info("can port exited with status: #{inspect status}")
+    exit(:port_err)
   end
 
   defp send_frames(frames, state) do
@@ -83,8 +88,7 @@ defmodule Ng.Can do
   end
 
   def terminate(reason, state) do
-    Logger.info "terminating with reason: #{reason}"
-    Port.close(state.port)
+    Logger.info "Ng.Can terminating with reason: #{inspect reason}"
   end
 
   defp call_port(state, command, arguments, timeout \\ 4000) do
@@ -98,6 +102,7 @@ defmodule Ng.Can do
     after
       timeout ->
         # Not sure how this can be recovered
+        Port.close(state.port)
         exit(:port_timed_out)
     end
   end

@@ -6,7 +6,7 @@
 #include <linux/can/raw.h>
 #include <linux/can/error.h>
 #define MAX_READBUF 100
-#define ENCODED_FRAME_SIZE 25
+#define ENCODED_FRAME_SIZE 27
 
 struct can_port {
     // CAN file handle

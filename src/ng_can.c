@@ -140,31 +140,6 @@ static void handle_open(const char *req, int *req_index)
   }
 }
 
-//TODO:convert to list
-static void handle_read(const char *req, int *req_index)
-{
-  struct can_frame can_frame;
-  int bytes_read = can_read(can_port, &can_frame);
-  if(bytes_read > 0 && (size_t) bytes_read >= sizeof(struct can_frame)) {
-    char *resp = malloc(32 + bytes_read);
-    int resp_index = sizeof(uint16_t);
-    resp[resp_index++] = response_id;
-    ei_encode_version(resp, &resp_index);
-    ei_encode_tuple_header(resp, &resp_index, 2);
-    ei_encode_atom(resp, &resp_index, "ok");
-    encode_can_frame(resp, &resp_index, &can_frame);
-    erlcmd_send(resp, resp_index);
-    free(resp);
-  } else if (bytes_read > 0) {
-    send_error_response("partialframe");
-  } else if(errno == EAGAIN) {
-    send_error_response("nodata");
-  }
-  else {
-    errx(EXIT_FAILURE, "failed to read from can device");
-  }
-}
-
 static void handle_await_read(const char *req, int *req_index)
 {
   if(can_port->awaiting_read == 1){
@@ -189,13 +164,13 @@ static void notify_read()
   ei_encode_empty_list(can_port->read_buffer, &resp_index);
   erlcmd_send(can_port->read_buffer, resp_index);
   free(can_port->read_buffer);
+  can_port->read_buffer = NULL;
   can_port->awaiting_read = 0;
 }
 
 static struct request_handler request_handlers[] = {
   { "await_read", handle_await_read },
   { "write", handle_write },
-  { "read", handle_read },
   { "open", handle_open },
   { NULL, NULL }
 };

@@ -110,7 +110,7 @@ int can_read_into_buffer(struct can_port *can_port, int *resp_index)
       if(errno == EAGAIN)
         return 0;
       else
-        return res;
+        return errno;
     }
     encode_can_frame(can_port->read_buffer, resp_index, &can_frame);
   }
