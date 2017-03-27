@@ -69,7 +69,7 @@ int can_open(struct can_port *can_port, char *interface_name)
   ioctl(s, SIOCGIFINDEX, &ifr);
 
   //add busoff error filter
-  can_err_mask_t err_mask = CAN_ERR_BUSOFF;
+  can_err_mask_t err_mask = CAN_ERR_MASK;
   setsockopt(s, SOL_CAN_RAW, CAN_RAW_ERR_FILTER, &err_mask, sizeof(err_mask));
 
   //bind

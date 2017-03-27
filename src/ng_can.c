@@ -58,14 +58,14 @@ static struct can_frame parse_can_frame(const char *req, int *req_index)
     struct can_frame can_frame;
     int num_tuple_elements;
     if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0 || num_tuple_elements != 2)
-      send_error_response("badtuple");
+      errx(EXIT_FAILURE, "Bad Tuple");
     unsigned long id;
     if (ei_decode_ulong(req, req_index, &id) < 0)
-      send_error_response("badcanid");
+      errx(EXIT_FAILURE, "Bad Can ID");
     long data_len;
     char data[8] = "";
     if(ei_decode_binary(req, req_index, data, &data_len) < 0 || data_len > 8)
-      send_error_response("badcandata");
+      errx(EXIT_FAILURE, "Bad Data");
 
     can_frame.can_id = id;
     can_frame.can_dlc = data_len;
@@ -93,7 +93,7 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
       can_port->write_buffer = buffer;
       return -1;
     } else if(write_result < 0) {
-      send_error_response("badwriteres");
+      errx(EXIT_FAILURE, "failed to write");
     }
   }
   return 0;
@@ -104,7 +104,7 @@ static void handle_write(const char *req, int *req_index)
 {
   int num_frames;
   if(ei_decode_list_header(req, req_index, &num_frames) < 0)
-    send_error_response("expectinglist");
+    errx(EXIT_FAILURE, "Expecting a list of frames");
   write_buffer(req, req_index, num_frames);
   send_ok_response();
 }
@@ -123,7 +123,7 @@ static void handle_open(const char *req, int *req_index)
   char interface_name[64];
   long binary_len;
   if(ei_decode_binary(req, req_index, interface_name, &binary_len) < 0) {
-    send_error_response("enoent");
+    errx(EXIT_FAILURE, "enoent");
     return;
   }
 
