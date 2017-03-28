@@ -120,12 +120,23 @@ static void process_write_buffer()
 
 static void handle_open(const char *req, int *req_index)
 {
+  int arity;
+  if (ei_decode_tuple_header(req, req_index, &arity) < 0 || arity != 3) {
+    errx(EXIT_FAILURE, "badopentuple");
+  }
   char interface_name[64];
   long binary_len;
   if(ei_decode_binary(req, req_index, interface_name, &binary_len) < 0) {
     errx(EXIT_FAILURE, "enoent");
-    return;
   }
+
+  long rcvbuf_size;
+  if(ei_decode_long(req, req_index, &rcvbuf_size) < 0)
+    errx(EXIT_FAILURE, "noreadbufsize");
+
+  long sndbuf_size;
+  if(ei_decode_long(req, req_index, &sndbuf_size) < 0)
+    errx(EXIT_FAILURE, "nowritebufsize");
 
   //REVIEW: is this necessary?
   interface_name[binary_len] = '\0';
@@ -133,7 +144,7 @@ static void handle_open(const char *req, int *req_index)
   if (can_is_open(can_port))
     can_close(can_port);
 
-  if (can_open(can_port, interface_name) >= 0) {
+  if (can_open(can_port, interface_name, &rcvbuf_size, &sndbuf_size) >= 0) {
     send_ok_response();
   } else {
     send_error_response("error opening can port");
@@ -154,7 +165,7 @@ static void handle_await_read(const char *req, int *req_index)
 static void notify_read()
 {
   //each can frame is ENCODED_FRAME_SIZE, add 32 (not exactly calculated) for headers + other stuff
-  can_port->read_buffer = malloc(32 + (MAX_READBUF * ENCODED_FRAME_SIZE));
+  can_port->read_buffer = malloc(32 + (1000 * ENCODED_FRAME_SIZE));
   int resp_index = sizeof(uint16_t);
   can_port->read_buffer[resp_index++] = notification_id;
   ei_encode_version(can_port->read_buffer, &resp_index);
@@ -207,8 +218,8 @@ int main(int argc, char *argv[])
 {
 #ifdef DEBUG
     char logfile[64];
-    /* sprintf(logfile, "ng_can-%d.log", (int) getpid()); */
-    sprintf(logfile, "/root/logs/ng_can.log", (int) getpid());
+    sprintf(logfile, "ng_can-%d.log", (int) getpid());
+    /* sprintf(logfile, "/root/logs/ng_can.log", (int) getpid()); */
     FILE *fp = fopen(logfile, "w+");
     log_location = fp;
 
@@ -247,7 +258,6 @@ int main(int argc, char *argv[])
       if (errno == EINTR)
         continue;
 
-      debug("exiting due to error");
       errx(EXIT_FAILURE, "poll");
     }
 

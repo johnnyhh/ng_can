@@ -22,39 +22,58 @@ defmodule NgCanTest do
   setup do
     :os.cmd('rm *.log')
     {:ok, can1} = Ng.Can.start_link()
-    :ok == Ng.Can.open(can1, @can1_interface)
     {:ok, can2} = Ng.Can.start_link()
-    :ok == Ng.Can.open(can2, @can2_interface)
     {:ok, %{can1: can1, can2: can2}}
   end
 
-  # test "write + read", %{can1: can1, can2: can2} do
-  #   foodata = <<97,97,97,97,97,97,97,97>>
-  #   <<fooid::size(32)>> = <<1, 2, 3, 4>>
-  #   frame = %{id: fooid, data: foodata}
-  #   :ok = GenServer.call(can1, {:write, [frame]})
-  #   assert {:error, :nodata} == GenServer.call(can1, :read)
-  #   {:ok, {id, recvd_data}} = GenServer.call(can2, :read)
-  #   assert recvd_data == foodata
-  #   assert {:error, :nodata} == GenServer.call(can2, :read)
-  # end
+  #  test "basic write + read", %{can1: can1, can2: can2} do
+  #    :ok = Ng.Can.open(can2, @can2_interface)
+  #    :ok = Ng.Can.open(can1, @can1_interface, sndbuf: 1024)
+  #    <<id1::size(32)>> = <<1, 2, 3, 4>>
+  #    <<id2::size(32)>> = <<4, 3, 2, 1>>
+  #    frame1 = {id1, <<97,97,97,97,97,97,97,97>>}
+  #    #pad short frames
+  #    frame2 = {id2, <<98,98,98,98,98,98,98>>}
+  #    :ok = Ng.Can.write(can1, [frame1, frame2])
+  #    :ok = Ng.Can.await_read(can2)
+  #    receive do
+  #      {:can_frames, _foobar, [rf1, rf2]} ->
+  #        assert rf1 == frame1
+  #        assert rf2 == {id2, <<98,98,98,98,98,98,98,0>>}
+  #    after
+  #      1000 -> raise "await data timed out"
+  #    end
+  #  end
 
-  test "write + await", %{can1: can1, can2: can2} do
-    <<id1::size(32)>> = <<1, 2, 3, 4>>
-    <<id2::size(32)>> = <<4, 3, 2, 1>>
-    frame1 = %{id: id1, data: <<97,97,97,97,97,97,97,97>>}
-    #pad short frames
-    frame2 = %{id: id2, data: <<98,98,98,98,98,98,98>>}
-    :ok = Ng.Can.write(can1, [frame1, frame2])
-    :ok = Ng.Can.await_read(can2)
+  test "write + read - fill writebuf", %{can1: can1, can2: can2} do
+    :ok = Ng.Can.open(can1, @can1_interface, sndbuf: 1024)
+    :ok = Ng.Can.open(can2, @can2_interface, rcvbuf: 106496)
+    frames = Enum.reduce (1..100), [], fn i, frames ->
+      <<id::size(32)>> = <<1,2,3,i>>
+      [{id, <<1,2,3,4,5,6,7,i>>} | frames]
+    end
+    :ok = Ng.Can.write(can1, frames)
+    recv_frames(can2, frames)
+    assert true
+  end
+
+  defp recv_frames(reader, sent_frames, recvd_frames \\ []) do
+    IO.puts "recving"
+    :ok = Ng.Can.await_read(reader)
     receive do
-      {:can_frames, _foobar, [rf1, rf2]} ->
-        assert rf1 == frame1
-        assert rf2 == %{frame2 | data: frame2.data <> <<0>>}
+      {:can_frames, _, new_frames} ->
+        recvd_frames = recvd_frames ++ new_frames
+        if length(recvd_frames) == length(sent_frames) do
+          assert new_frames == sent_frames
+        else
+          IO.puts "only got #{length(recvd_frames)}"
+          recv_frames(reader, sent_frames, recvd_frames)
+        end
       other ->
-        raise("wrong msg recvd: #{inspect other}")
-    after
-      1000 -> raise "await data timed out"
+        raise "wrong msg recvd"
+    after 
+      3000 ->
+        raise "timed out waiting for frames"
     end
   end
 

@@ -4,10 +4,10 @@ defmodule Ng.Can do
   @moduledoc """
   Documentation for NgCan.
   """
+  @default_bufsize 106496
   defmodule State do
-    @moduledoc false
     defstruct [
-      port: nil,                   # C port process
+      port: nil,
       awaiting_process: nil,
       interface: nil
     ]
@@ -28,15 +28,15 @@ defmodule Ng.Can do
     write(pid, [frames])
   end
 
-  def open(pid, name) do
-    GenServer.call(pid, {:open, name})
+  def open(pid, name, args \\[]) do
+    GenServer.call(pid, {:open, name, args})
   end
 
   def await_read(pid) do
     GenServer.call(pid, :await_read)
   end
 
-  def init(_args) do
+  def init(args) do
     executable = :code.priv_dir(:ng_can) ++ '/ng_can'
     port = Port.open({:spawn_executable, executable},
       [{:args, []},
@@ -44,8 +44,7 @@ defmodule Ng.Can do
         :use_stdio,
         :binary,
         :exit_status])
-    state = %State{port: port}
-    {:ok, state}
+    {:ok, %State{port: port}}
   end
 
   #port communication
@@ -66,8 +65,11 @@ defmodule Ng.Can do
     {:noreply, state}
   end
 
-  def handle_call({:open, interface}, {from_pid, _}, state) do
-    response = call_port(state, :open, interface)
+  def handle_call({:open, interface, args}, {from_pid, _}, state) do
+    response = call_port(state, :open,
+                         {interface, args[:rcvbuf] || @default_bufsize,
+                           args[:sndbuf] || @default_bufsize
+                         })
     {:reply, response, %{state | interface: interface}}
   end
 

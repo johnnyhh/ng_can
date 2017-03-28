@@ -49,7 +49,7 @@ int can_close(struct can_port *port)
   return 0;
 }
 
-int can_open(struct can_port *can_port, char *interface_name)
+int can_open(struct can_port *can_port, char *interface_name, long *rcvbuf_size, long *sndbuf_size)
 {
   int s;
   struct sockaddr_can addr;
@@ -71,6 +71,12 @@ int can_open(struct can_port *can_port, char *interface_name)
   //add busoff error filter
   can_err_mask_t err_mask = CAN_ERR_MASK;
   setsockopt(s, SOL_CAN_RAW, CAN_RAW_ERR_FILTER, &err_mask, sizeof(err_mask));
+
+  //set buffersizes
+  if(setsockopt(s, SOL_SOCKET, SO_RCVBUF, rcvbuf_size, sizeof(*rcvbuf_size)) < 0)
+    errx(EXIT_FAILURE, "badrcvbuf");
+  if(setsockopt(s, SOL_SOCKET, SO_SNDBUF, sndbuf_size, sizeof(*sndbuf_size)) < 0)
+    errx(EXIT_FAILURE, "badsndbuf");
 
   //bind
   addr.can_family = AF_CAN;
@@ -104,15 +110,17 @@ int can_read_into_buffer(struct can_port *can_port, int *resp_index)
   int num_read;
   struct can_frame can_frame;
 
-  for(num_read = 0; num_read < MAX_READBUF; num_read++){
+  for(num_read = 0; num_read < 1000; num_read++){
     int res = read(can_port->fd, &can_frame, sizeof(struct can_frame));
     if(res <= 0){
-      if(errno == EAGAIN)
+      if(errno == EAGAIN){
         return 0;
+      }
       else
         return errno;
+    } else {
+      encode_can_frame(can_port->read_buffer, resp_index, &can_frame);
     }
-    encode_can_frame(can_port->read_buffer, resp_index, &can_frame);
   }
   return 0;
 }

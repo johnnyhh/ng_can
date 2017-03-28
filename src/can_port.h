@@ -23,7 +23,7 @@ struct can_port {
     int awaiting_read;
 };
 
-int can_open(struct can_port *port, char *interface_name);
+int can_open(struct can_port *port, char *interface_name, long *rcvbuf_size, long *sndbuf_size);
 
 int can_is_open(struct can_port *port);
 
