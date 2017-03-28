@@ -26,7 +26,6 @@ int can_init(struct can_port **pport)
     port->fd = -1;
 
     //write buffer stuff
-    port->write_buffer_offset = 0;
     port->write_buffer_size = 0;
     port->write_buffer = NULL;
 

@@ -22,7 +22,9 @@ defmodule NgCanTest do
   setup do
     :os.cmd('rm *.log')
     {:ok, can1} = Ng.Can.start_link()
+    Logger.info "can1 is: #{inspect can1}"
     {:ok, can2} = Ng.Can.start_link()
+    Logger.info "can2 is: #{inspect can2}"
     {:ok, %{can1: can1, can2: can2}}
   end
 
@@ -58,13 +60,12 @@ defmodule NgCanTest do
   end
 
   defp recv_frames(reader, sent_frames, recvd_frames \\ []) do
-    IO.puts "recving"
     :ok = Ng.Can.await_read(reader)
     receive do
       {:can_frames, _, new_frames} ->
         recvd_frames = recvd_frames ++ new_frames
         if length(recvd_frames) == length(sent_frames) do
-          assert new_frames == sent_frames
+          assert recvd_frames == sent_frames
         else
           IO.puts "only got #{length(recvd_frames)}"
           recv_frames(reader, sent_frames, recvd_frames)

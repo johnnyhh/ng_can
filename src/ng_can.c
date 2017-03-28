@@ -76,19 +76,17 @@ static struct can_frame parse_can_frame(const char *req, int *req_index)
 static int write_buffer(const char *req, int *req_index, int num_frames)
 {
   for (int i = 0; i < num_frames; i++) {
-    int start_index = *req_index;
+    int this_frame_offset = *req_index;
     struct can_frame can_frame = parse_can_frame(req, req_index);
     int write_result = can_write(can_port, &can_frame);
 
     if(write_result < 0 && errno == EAGAIN) {
       //enqueue the remaining frames
       int num_unsent = num_frames - i;
-      can_port->write_buffer_offset = 0;
       can_port->write_buffer_size = num_unsent;
-      int frame_size = *req_index - start_index;
-      int num_bytes = frame_size * num_unsent;
+      int num_bytes = ENCODED_WRITE_FRAME_SIZE * num_unsent;
       char *buffer = malloc(num_bytes);
-      memcpy(buffer, req + start_index, num_bytes);
+      memcpy(buffer, req + this_frame_offset, num_bytes);
       free(can_port->write_buffer);
       can_port->write_buffer = buffer;
       return -1;
@@ -111,10 +109,10 @@ static void handle_write(const char *req, int *req_index)
 
 static void process_write_buffer()
 {
-  if(write_buffer(can_port->write_buffer, &(can_port->write_buffer_offset), can_port->write_buffer_size) == 0){
+  int req_index = 0;
+  if(write_buffer(can_port->write_buffer, &req_index, can_port->write_buffer_size) == 0){
     free(can_port->write_buffer);
     can_port->write_buffer_size = 0;
-    can_port->write_buffer_offset = 0;
   }
 }
 
@@ -164,8 +162,8 @@ static void handle_await_read(const char *req, int *req_index)
 
 static void notify_read()
 {
-  //each can frame is ENCODED_FRAME_SIZE, add 32 (not exactly calculated) for headers + other stuff
-  can_port->read_buffer = malloc(32 + (1000 * ENCODED_FRAME_SIZE));
+  //each can frame is ENCODED_READ_FRAME_SIZE, add 32 (not exactly calculated) for headers + other stuff
+  can_port->read_buffer = malloc(32 + (1000 * ENCODED_READ_FRAME_SIZE));
   int resp_index = sizeof(uint16_t);
   can_port->read_buffer[resp_index++] = notification_id;
   ei_encode_version(can_port->read_buffer, &resp_index);

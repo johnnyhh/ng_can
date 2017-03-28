@@ -6,7 +6,8 @@
 #include <linux/can/raw.h>
 #include <linux/can/error.h>
 #define MAX_READBUF 100
-#define ENCODED_FRAME_SIZE 27
+#define ENCODED_READ_FRAME_SIZE 27
+#define ENCODED_WRITE_FRAME_SIZE 20
 
 struct can_port {
     // CAN file handle
@@ -16,7 +17,6 @@ struct can_port {
     char *write_buffer;
     //^const?
     int write_buffer_size;
-    int write_buffer_offset;
 
     //read buffer stuff
     char *read_buffer;
