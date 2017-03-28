@@ -21,8 +21,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#define DEBUG
-
 #ifdef DEBUG
 FILE *log_location;
 #define LOG_LOCATION log_location
