@@ -1,5 +1,5 @@
 # NgCan
-a simple elixir port to read from and write to a CAN bus. since it uses socketCAN, it only runs on Linux.
+a simple elixir library to read from and write to a CAN bus. since it uses socketCAN, it only runs on Linux.
 
 ## Usage
 
