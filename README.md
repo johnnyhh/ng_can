@@ -11,7 +11,7 @@ Ng.Can.open(can_port, "vcan0", sndbuf: 1024, rcvbuf: 106496)
 
 **writing to a can port**
 ```
-<<id::size(32)>> = <<1,2,3,i>>
+<<id::size(32)>> = <<1,2,3,4>>
 frame = {id, <<1,2,3,4,5,6,7,8>>}
 Ng.Can.write(can_port, frame)
 #write can also take an array of frames
