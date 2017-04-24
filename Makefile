@@ -14,40 +14,9 @@ CFLAGS += -std=c99 -D_GNU_SOURCE
 CC ?= $(CROSSCOMPILER)gcc
 
 ###################
-# If you're having trouble with the serial port, commenting in the following line
-# may give some more hints. By default, log messages are appended to ng_can.log.
-# See src/ng_can.c to change this. Be sure to rebuild everything by invoking
-# "mix clean" and then "mix compile", so that the flag takes effect.
 #CFLAGS += -DDEBUG
 
 SRC=$(wildcard src/*.c)
-
-# Windows-specific updates
-ifeq ($(OS),Windows_NT)
-
-# Libraries needed to enumerate serial ports
-LDFLAGS += -lSetupapi -lCfgmgr32
-
-# On Windows, make defaults CC=cc and
-# cc doesn't exist with mingw
-ifeq ($(CC),cc)
-CC = gcc
-endif
-
-# Statically link on Windows to simplify distribution of pre-built version
-LDFLAGS += -static
-
-# To avoid linking issues, use copy/pasted version of ei.
-# YES, this is unfortunate, but it was easier than
-# battling mingw/visual c++ differences.
-ERL_CFLAGS = -I"$(CURDIR)/src/ei_copy"
-SRC += $(wildcard src/ei_copy/*.c)
-CFLAGS += -DUNICODE
-
-EXEEXT=.exe
-
-else
-# Non-Windows
 
 # -lrt is needed for clock_gettime() on linux with glibc before version 2.17
 # (for example raspbian wheezy)
@@ -72,20 +41,11 @@ endif
 ERL_CFLAGS ?= -I$(ERL_EI_INCLUDE_DIR)
 ERL_LDFLAGS ?= -L$(ERL_EI_LIBDIR) -lei
 
-# If compiling on OSX and not crosscompiling, include CoreFoundation and IOKit
-ifeq ($(CROSSCOMPILE),)
-ifeq ($(shell uname),Darwin)
-LDFLAGS += -framework CoreFoundation -framework IOKit
-endif
-endif
-
-endif
-
 OBJ=$(SRC:.c=.o)
 
 .PHONY: all clean
 
-all: priv priv/ng_can$(EXEEXT)
+all: priv priv/ng_can
 
 %.o: %.c
 	$(CC) -c $(ERL_CFLAGS) $(CFLAGS) -o $@ $<
@@ -93,8 +53,8 @@ all: priv priv/ng_can$(EXEEXT)
 priv:
 	mkdir -p priv
 
-priv/ng_can$(EXEEXT): $(OBJ)
+priv/ng_can: $(OBJ)
 	$(CC) $^ $(ERL_LDFLAGS) $(LDFLAGS) -o $@
 
 clean:
-	rm -f priv/ng_can$(EXEEXT) src/*.o src/ei_copy/*.o
+	rm -f priv/ng_can src/*.o src/ei_copy/*.o
