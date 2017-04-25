@@ -66,6 +66,7 @@ defmodule Ng.Can do
   end
 
   def handle_call({:open, interface, args}, {from_pid, _}, state) do
+    :os.cmd 'ip link set #{interface} up type can bitrate 250000'
     response = call_port(state, :open,
                          {interface, args[:rcvbuf] || @default_bufsize,
                            args[:sndbuf] || @default_bufsize
