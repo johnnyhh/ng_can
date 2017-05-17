@@ -91,7 +91,7 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
       can_port->write_buffer = buffer;
       return -1;
     } else if(write_result < 0) {
-      errx(EXIT_FAILURE, "failed to write");
+      errx(EXIT_FAILURE, "failed to write: %d", errno);
     }
   }
   return 0;
