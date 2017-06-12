@@ -80,7 +80,7 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
     struct can_frame can_frame = parse_can_frame(req, req_index);
     int write_result = can_write(can_port, &can_frame);
 
-    if(write_result < 0 && errno == EAGAIN) {
+    if(write_result < 0 && (errno == EAGAIN || errno == ENOBUFS)) {
       //enqueue the remaining frames
       int num_unsent = num_frames - i;
       can_port->write_buffer_size = num_unsent;
@@ -216,8 +216,7 @@ int main(int argc, char *argv[])
 {
 #ifdef DEBUG
     char logfile[64];
-    sprintf(logfile, "ng_can-%d.log", (int) getpid());
-    /* sprintf(logfile, "/root/logs/ng_can.log", (int) getpid()); */
+    sprintf(logfile, "/root/logs/ng_can-%d.log", (int) getpid());
     FILE *fp = fopen(logfile, "w+");
     log_location = fp;
 
