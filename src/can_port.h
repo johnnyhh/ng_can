@@ -20,7 +20,6 @@ struct can_port {
 
     //read buffer stuff
     char *read_buffer;
-    int awaiting_read;
 };
 
 int can_open(struct can_port *port, char *interface_name, long *rcvbuf_size, long *sndbuf_size);

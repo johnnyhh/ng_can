@@ -21,6 +21,7 @@ static struct can_port *can_port = NULL;
 
 // Utilities
 static const char response_id = 'r';
+static const char error_id = 'e';
 static const char notification_id = 'n';
 
 /**
@@ -41,15 +42,15 @@ static void send_ok_response()
  *
  * @param reason a reason (sent back as an atom)
  */
-static void send_error_response(const char *reason)
+static void send_error_notification(const char *reason)
 {
   char resp[256];
   int resp_index = sizeof(uint16_t); // Space for payload size
-  resp[resp_index++] = response_id;
+  resp[resp_index++] = error_id;
   ei_encode_version(resp, &resp_index);
   ei_encode_tuple_header(resp, &resp_index, 2);
   ei_encode_atom(resp, &resp_index, "error");
-  ei_encode_atom(resp, &resp_index, reason);
+  ei_encode_binary(resp, &resp_index, reason, strlen(reason));
   erlcmd_send(resp, resp_index);
 }
 
@@ -91,7 +92,10 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
       can_port->write_buffer = buffer;
       return -1;
     } else if(write_result < 0) {
-      errx(EXIT_FAILURE, "failed to write: %d", errno);
+      char *err_str[64];
+      sprintf(err_str, "write() error: %d", errno);
+      send_error_notification(err_str);
+      errx(EXIT_FAILURE, err_str);
     }
   }
   return 0;
@@ -145,40 +149,34 @@ static void handle_open(const char *req, int *req_index)
   if (can_open(can_port, interface_name, &rcvbuf_size, &sndbuf_size) >= 0) {
     send_ok_response();
   } else {
-    send_error_response("error opening can port");
-  }
-}
-
-static void handle_await_read(const char *req, int *req_index)
-{
-  if(can_port->awaiting_read == 1){
-    send_error_response("busy");
-  }
-  else {
-    can_port->awaiting_read = 1;
-    send_ok_response();
+    send_error_notification("error opening can port");
   }
 }
 
 static void notify_read()
 {
   //each can frame is ENCODED_READ_FRAME_SIZE, add 32 (not exactly calculated) for headers + other stuff
-  can_port->read_buffer = malloc(32 + (1000 * ENCODED_READ_FRAME_SIZE));
+  can_port->read_buffer = malloc(36 + (1000 * ENCODED_READ_FRAME_SIZE));
   int resp_index = sizeof(uint16_t);
   can_port->read_buffer[resp_index++] = notification_id;
   ei_encode_version(can_port->read_buffer, &resp_index);
-  ei_encode_tuple_header(can_port->read_buffer, &resp_index, 2);
+  ei_encode_tuple_header(can_port->read_buffer, &resp_index, 3);
   ei_encode_atom(can_port->read_buffer, &resp_index, "notif");
-  can_read_into_buffer(can_port, &resp_index);
+  int num_read = can_read_into_buffer(can_port, &resp_index);
+  if (num_read < 0){
+    char *err_str[64];
+    sprintf(err_str, "read() error: %d", errno);
+    send_error_notification(err_str);
+    errx(EXIT_FAILURE, err_str);
+  }
   ei_encode_empty_list(can_port->read_buffer, &resp_index);
+  ei_encode_ulong(can_port->read_buffer, &resp_index, num_read);
   erlcmd_send(can_port->read_buffer, resp_index);
   free(can_port->read_buffer);
   can_port->read_buffer = NULL;
-  can_port->awaiting_read = 0;
 }
 
 static struct request_handler request_handlers[] = {
-  { "await_read", handle_await_read },
   { "write", handle_write },
   { "open", handle_open },
   { NULL, NULL }
@@ -230,23 +228,18 @@ int main(int argc, char *argv[])
 
   for (;;) {
     struct pollfd fdset[3];
-    int num_listeners = 1;
+    int num_listeners = 2;
 
     fdset[0].fd = STDIN_FILENO;
     fdset[0].events = POLLIN;
     fdset[0].revents = 0;
 
     fdset[1].fd = can_port->fd;
+    fdset[1].events = POLLIN;
     fdset[1].revents = 0;
 
     if(can_port->write_buffer_size > 0) {
-      num_listeners = 2;
-      fdset[1].events = POLLOUT;
-    }
-
-    if(can_port->awaiting_read == 1) {
-      num_listeners = 2;
-      fdset[1].events |= POLLIN;
+      fdset[1].events |= POLLOUT;
     }
 
     int rc = poll(fdset, num_listeners, -1);

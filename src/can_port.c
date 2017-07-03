@@ -30,7 +30,6 @@ int can_init(struct can_port **pport)
     port->write_buffer = NULL;
 
     //read buffer stuff
-    port->awaiting_read = 0;
     port->read_buffer = NULL;
 
     return 0;
@@ -112,14 +111,15 @@ int can_read_into_buffer(struct can_port *can_port, int *resp_index)
   for(num_read = 0; num_read < 1000; num_read++){
     int res = read(can_port->fd, &can_frame, sizeof(struct can_frame));
     if(res <= 0){
-      if(errno == EAGAIN){
-        return 0;
+      //I think ENETDOWN is ok because catching netdown at a higher level?
+      if(errno == EAGAIN || errno == ENETDOWN){
+        return num_read;
       }
       else
-        return errno;
+        return -1;
     } else {
       encode_can_frame(can_port->read_buffer, resp_index, &can_frame);
     }
   }
-  return 0;
+  return num_read;
 }
