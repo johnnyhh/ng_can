@@ -81,7 +81,8 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
     struct can_frame can_frame = parse_can_frame(req, req_index);
     int write_result = can_write(can_port, &can_frame);
 
-    if(write_result < 0 && (errno == EAGAIN || errno == ENOBUFS)) {
+    //ENETDOWN is okay since we're restarting using `ip link` in ng_can.ex?
+    if(write_result < 0 && (errno == EAGAIN || errno == ENOBUFS || errno == ENETDOWN)) {
       //enqueue the remaining frames
       int num_unsent = num_frames - i;
       can_port->write_buffer_size = num_unsent;
