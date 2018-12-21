@@ -85,11 +85,13 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
     if(write_result < 0 && (errno == EAGAIN || errno == ENOBUFS || errno == ENETDOWN)) {
       //enqueue the remaining frames
       int num_unsent = num_frames - i;
+      if (can_port->write_buffer_size != 0) {
+        free(can_port->write_buffer);
+      }
       can_port->write_buffer_size = num_unsent;
       int num_bytes = ENCODED_WRITE_FRAME_SIZE * num_unsent;
       char *buffer = malloc(num_bytes);
       memcpy(buffer, req + this_frame_offset, num_bytes);
-      free(can_port->write_buffer);
       can_port->write_buffer = buffer;
       return -1;
     } else if(write_result < 0) {
@@ -115,9 +117,11 @@ static void handle_write(const char *req, int *req_index)
 static void process_write_buffer()
 {
   int req_index = 0;
-  if(write_buffer(can_port->write_buffer, &req_index, can_port->write_buffer_size) == 0){
-    free(can_port->write_buffer);
-    can_port->write_buffer_size = 0;
+  if (can_port->write_buffer_size != 0) {
+    if(write_buffer(can_port->write_buffer, &req_index, can_port->write_buffer_size) == 0){
+      free(can_port->write_buffer);
+      can_port->write_buffer_size = 0;
+    }
   }
 }
 
