@@ -12,6 +12,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#define ERR_STR_MAX_LEN 64
+
 struct request_handler {
   const char *name;
   void (*handler)(const char *req, int *req_index);
@@ -54,23 +56,25 @@ static void send_error_notification(const char *reason)
   erlcmd_send(resp, resp_index);
 }
 
-static struct can_frame parse_can_frame(const char *req, int *req_index)
+static struct canfd_frame parse_can_frame(const char *req, int *req_index)
 {
-    struct can_frame can_frame;
+    struct canfd_frame can_frame = { 0 };
+
     int num_tuple_elements;
     if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0 || num_tuple_elements != 2)
       errx(EXIT_FAILURE, "Bad Tuple");
+
     unsigned long id;
-    if (ei_decode_ulong(req, req_index, &id) < 0)
+    if(ei_decode_ulong(req, req_index, &id) < 0)
       errx(EXIT_FAILURE, "Bad Can ID");
+
     long data_len;
-    char data[8] = "";
-    if(ei_decode_binary(req, req_index, data, &data_len) < 0 || data_len != 8)
+    if(ei_decode_binary(req, req_index, can_frame.data, &data_len) < 0 || data_len > CANFD_MAX_DLEN)
       errx(EXIT_FAILURE, "Bad Data");
 
     can_frame.can_id = id;
-    can_frame.can_dlc = data_len;
-    memcpy(can_frame.data, data, 8);
+    can_frame.len = data_len;
+
     return can_frame;
 }
 
@@ -78,7 +82,7 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
 {
   for (int i = 0; i < num_frames; i++) {
     int this_frame_offset = *req_index;
-    struct can_frame can_frame = parse_can_frame(req, req_index);
+    struct canfd_frame can_frame = parse_can_frame(req, req_index);
     int write_result = can_write(can_port, &can_frame);
 
     //ENETDOWN is okay since we're restarting using `ip link` in ng_can.ex?
@@ -87,6 +91,7 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
       int num_unsent = num_frames - i;
       if (can_port->write_buffer_size != 0) {
         free(can_port->write_buffer);
+        can_port->write_buffer = NULL;
       }
       can_port->write_buffer_size = num_unsent;
       int num_bytes = ENCODED_WRITE_FRAME_SIZE * num_unsent;
@@ -95,8 +100,8 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
       can_port->write_buffer = buffer;
       return -1;
     } else if(write_result < 0) {
-      char *err_str[64];
-      sprintf(err_str, "write() error: %d", errno);
+      char err_str[ERR_STR_MAX_LEN] = { 0 };
+      snprintf(err_str, ERR_STR_MAX_LEN, "write() error: %d", errno);
       send_error_notification(err_str);
       errx(EXIT_FAILURE, err_str);
     }
@@ -120,6 +125,7 @@ static void process_write_buffer()
   if (can_port->write_buffer_size != 0) {
     if(write_buffer(can_port->write_buffer, &req_index, can_port->write_buffer_size) == 0){
       free(can_port->write_buffer);
+      can_port->write_buffer = NULL;
       can_port->write_buffer_size = 0;
     }
   }
@@ -131,7 +137,7 @@ static void handle_open(const char *req, int *req_index)
   if (ei_decode_tuple_header(req, req_index, &arity) < 0 || arity != 3) {
     errx(EXIT_FAILURE, "badopentuple");
   }
-  char interface_name[64];
+  char interface_name[64] = { 0 };
   long binary_len;
   if(ei_decode_binary(req, req_index, interface_name, &binary_len) < 0) {
     errx(EXIT_FAILURE, "enoent");
@@ -144,9 +150,6 @@ static void handle_open(const char *req, int *req_index)
   long sndbuf_size;
   if(ei_decode_long(req, req_index, &sndbuf_size) < 0)
     errx(EXIT_FAILURE, "nowritebufsize");
-
-  //REVIEW: is this necessary?
-  interface_name[binary_len] = '\0';
 
   if (can_is_open(can_port))
     can_close(can_port);
@@ -169,8 +172,8 @@ static void notify_read()
   ei_encode_atom(can_port->read_buffer, &resp_index, "notif");
   int num_read = can_read_into_buffer(can_port, &resp_index);
   if (num_read < 0){
-    char *err_str[64];
-    sprintf(err_str, "read() error: %d", errno);
+    char err_str[ERR_STR_MAX_LEN];
+    snprintf(err_str, ERR_STR_MAX_LEN, "read() error: %d", errno);
     send_error_notification(err_str);
     errx(EXIT_FAILURE, err_str);
   }
@@ -219,7 +222,7 @@ int main(int argc, char *argv[])
 {
 #ifdef DEBUG
     char logfile[64];
-    sprintf(logfile, "/root/logs/ng_can-%d.log", (int) getpid());
+    snprintf(logfile, sizeof(logfile) / sizeof(logfile[0]), "/root/logs/ng_can-%d.log", (int) getpid());
     FILE *fp = fopen(logfile, "w+");
     log_location = fp;
 

@@ -30,10 +30,10 @@ int can_init(struct can_port **pport);
 
 int can_close(struct can_port *port);
 
-int can_write(struct can_port *can_port, struct can_frame *can_frame);
+int can_write(struct can_port *can_port, struct canfd_frame *can_frame);
 
-int can_read(struct can_port *can_port, struct can_frame *can_frame);
+int can_read(struct can_port *can_port, struct canfd_frame *can_frame);
 
 int can_read_into_buffer(struct can_port *can_port, int *resp_index);
 
-void encode_can_frame(char *resp, int *resp_index, struct can_frame *can_frame);
+void encode_can_frame(char *resp, int *resp_index, struct canfd_frame *can_frame);

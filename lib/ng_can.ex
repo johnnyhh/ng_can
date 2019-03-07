@@ -29,7 +29,7 @@ defmodule Ng.Can do
   end
 
   def write(pid, frames) when is_list(frames) do
-    GenServer.call(pid, {:write, pad_to_8_bytes(frames)})
+    GenServer.call(pid, {:write, frames})
   end
   def write(pid, frames) do
     write(pid, [frames])
@@ -124,14 +124,6 @@ defmodule Ng.Can do
 
   def terminate(reason, state) do
     Logger.info "Ng.Can terminating with reason: #{inspect reason}"
-  end
-
-  defp pad_to_8_bytes(frames) do
-    Enum.map frames, fn {id, data} ->
-      bits_padding = (8 - byte_size(data)) * 8
-      padded_data = data <> <<0 :: size(bits_padding)>>
-      {id, padded_data}
-    end
   end
 
   defp call_port(state, command, arguments, timeout \\ 4000) do
