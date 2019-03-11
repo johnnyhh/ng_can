@@ -56,9 +56,9 @@ static void send_error_notification(const char *reason)
   erlcmd_send(resp, resp_index);
 }
 
-static struct canfd_frame parse_can_frame(const char *req, int *req_index)
+static struct can_frame parse_can_frame(const char *req, int *req_index)
 {
-    struct canfd_frame can_frame = { 0 };
+    struct can_frame can_frame = { 0 };
 
     int num_tuple_elements;
     if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0 || num_tuple_elements != 2)
@@ -69,43 +69,83 @@ static struct canfd_frame parse_can_frame(const char *req, int *req_index)
       errx(EXIT_FAILURE, "Bad Can ID");
 
     long data_len;
-    if(ei_decode_binary(req, req_index, can_frame.data, &data_len) < 0 || data_len > CANFD_MAX_DLEN)
+    if(ei_decode_binary(req, req_index, can_frame.data, &data_len) < 0 || data_len > CAN_MAX_DLEN)
       errx(EXIT_FAILURE, "Bad Data");
 
     can_frame.can_id = id;
-    can_frame.len = data_len;
+    can_frame.can_dlc = data_len;
 
     return can_frame;
 }
 
+static struct canfd_frame parse_canfd_frame(const char *req, int *req_index)
+{
+    struct canfd_frame canfd_frame = { 0 };
+
+    int num_tuple_elements;
+    if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0 || num_tuple_elements != 2)
+      errx(EXIT_FAILURE, "Bad Tuple");
+
+    unsigned long id;
+    if(ei_decode_ulong(req, req_index, &id) < 0)
+      errx(EXIT_FAILURE, "Bad Can ID");
+
+    long data_len;
+    if(ei_decode_binary(req, req_index, canfd_frame.data, &data_len) < 0 || data_len > CANFD_MAX_DLEN)
+      errx(EXIT_FAILURE, "Bad Data");
+
+    canfd_frame.can_id = id;
+    canfd_frame.len = data_len;
+
+    return canfd_frame;
+}
+
 static int write_buffer(const char *req, int *req_index, int num_frames)
 {
-  for (int i = 0; i < num_frames; i++) {
-    int this_frame_offset = *req_index;
-    struct canfd_frame can_frame = parse_can_frame(req, req_index);
-    int write_result = can_write(can_port, &can_frame);
+  bool is_canfd = can_port->is_canfd;
 
-    //ENETDOWN is okay since we're restarting using `ip link` in ng_can.ex?
-    if(write_result < 0 && (errno == EAGAIN || errno == ENOBUFS || errno == ENETDOWN)) {
+  for (int i = 0; i < num_frames; i++)
+  {
+    int this_frame_offset = *req_index;
+    int write_result;
+
+    if (is_canfd)
+    {
+      struct canfd_frame canfd_frame = parse_canfd_frame(req, req_index);
+      write_result = canfd_write(can_port, &canfd_frame);
+    }
+    else
+    {
+      struct can_frame can_frame = parse_can_frame(req, req_index);
+      write_result = can_write(can_port, &can_frame);
+    }
+    
+    if(write_result < 0 && (errno == EAGAIN || errno == ENOBUFS))
+    {
       //enqueue the remaining frames
       int num_unsent = num_frames - i;
-      if (can_port->write_buffer_size != 0) {
+      if (can_port->write_buffer_size != 0)
+      {
         free(can_port->write_buffer);
         can_port->write_buffer = NULL;
       }
+
       can_port->write_buffer_size = num_unsent;
       int num_bytes = ENCODED_WRITE_FRAME_SIZE * num_unsent;
       char *buffer = malloc(num_bytes);
       memcpy(buffer, req + this_frame_offset, num_bytes);
       can_port->write_buffer = buffer;
       return -1;
-    } else if(write_result < 0) {
+    }
+    else if(write_result < 0)
+    {
       char err_str[ERR_STR_MAX_LEN] = { 0 };
       snprintf(err_str, ERR_STR_MAX_LEN, "write() error: %d", errno);
       send_error_notification(err_str);
       errx(EXIT_FAILURE, err_str);
     }
   }
+
   return 0;
 }
 
@@ -113,8 +153,12 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
 static void handle_write(const char *req, int *req_index)
 {
   int num_frames;
+
   if(ei_decode_list_header(req, req_index, &num_frames) < 0)
+  {
     errx(EXIT_FAILURE, "Expecting a list of frames");
+  }
+
   write_buffer(req, req_index, num_frames);
   send_ok_response();
 }
@@ -122,8 +166,11 @@ static void handle_write(const char *req, int *req_index)
 static void process_write_buffer()
 {
   int req_index = 0;
-  if (can_port->write_buffer_size != 0) {
-    if(write_buffer(can_port->write_buffer, &req_index, can_port->write_buffer_size) == 0){
+
+  if (can_port->write_buffer_size != 0)
+  {
+    if(write_buffer(can_port->write_buffer, &req_index, can_port->write_buffer_size) == 0)
+    {
       free(can_port->write_buffer);
       can_port->write_buffer = NULL;
       can_port->write_buffer_size = 0;
@@ -234,7 +281,8 @@ int main(int argc, char *argv[])
   struct erlcmd *handler = malloc(sizeof(struct erlcmd));
   erlcmd_init(handler, handle_elixir_request, NULL);
 
-  for (;;) {
+  for (;;)
+  {
     struct pollfd fdset[3];
     int num_listeners = 2;
 
@@ -246,7 +294,8 @@ int main(int argc, char *argv[])
     fdset[1].events = POLLIN;
     fdset[1].revents = 0;
 
-    if(can_port->write_buffer_size > 0) {
+    if(can_port->write_buffer_size > 0)
+    {
       fdset[1].events |= POLLOUT;
     }
 
