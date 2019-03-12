@@ -53,8 +53,10 @@ int can_close(struct can_port *port)
 int can_open(struct can_port *can_port, char *interface_name, char *interface_type, long *rcvbuf_size, long *sndbuf_size)
 {
   int s;
+  int canfd_on;
   struct sockaddr_can addr;
   struct ifreq ifr;
+
 
   //open socket
   if ((s = socket(PF_CAN, SOCK_RAW, CAN_RAW)) < 0)
@@ -76,6 +78,10 @@ int can_open(struct can_port *can_port, char *interface_name, char *interface_ty
   can_err_mask_t err_mask = CAN_ERR_MASK;
   setsockopt(s, SOL_CAN_RAW, CAN_RAW_ERR_FILTER, &err_mask, sizeof(err_mask));
 
+  /* try to switch the bridge socket into CAN FD mode */
+  canfd_on = (int)can_port->is_canfd;
+  setsockopt(s, SOL_CAN_RAW, CAN_RAW_FD_FRAMES, &canfd_on, sizeof(canfd_on));
+
   //set buffersizes
   if(setsockopt(s, SOL_SOCKET, SO_RCVBUF, rcvbuf_size, sizeof(*rcvbuf_size)) < 0)
     errx(EXIT_FAILURE, "badrcvbuf");
@@ -85,7 +91,6 @@ int can_open(struct can_port *can_port, char *interface_name, char *interface_ty
   //bind
   addr.can_family = AF_CAN;
   addr.can_ifindex = ifr.ifr_ifindex;
-
   return bind(s, (struct sockaddr *)&addr, sizeof(addr));
 }
 
@@ -147,14 +152,14 @@ int can_read_into_buffer(struct can_port *can_port, int *resp_index)
     {
       res = read(can_port->fd, &can_frame, sizeof(struct can_frame));
     }
-    
+
 
     if(res <= 0)
     {
       //I think ENETDOWN is ok because catching netdown at a higher level?
       return (errno == EAGAIN || errno == ENETDOWN)? num_read : -1;
-    } 
-    else 
+    }
+    else
     {
       if (is_canfd)
       {
