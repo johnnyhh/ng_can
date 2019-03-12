@@ -25,7 +25,7 @@ struct can_port {
     bool is_canfd;
 };
 
-int can_open(struct can_port *port, char *interface_name, long *rcvbuf_size, long *sndbuf_size);
+int can_open(struct can_port *port, char *interface_name, char *interface_type, long *rcvbuf_size, long *sndbuf_size);
 
 int can_is_open(struct can_port *port);
 

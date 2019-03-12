@@ -50,7 +50,7 @@ int can_close(struct can_port *port)
   return 0;
 }
 
-int can_open(struct can_port *can_port, char *interface_name, long *rcvbuf_size, long *sndbuf_size)
+int can_open(struct can_port *can_port, char *interface_name, char *interface_type, long *rcvbuf_size, long *sndbuf_size)
 {
   int s;
   struct sockaddr_can addr;
@@ -68,6 +68,9 @@ int can_open(struct can_port *can_port, char *interface_name, long *rcvbuf_size,
   //get interface index
   strcpy(ifr.ifr_name, interface_name);
   ioctl(s, SIOCGIFINDEX, &ifr);
+
+  //get interface type
+  can_port->is_canfd = (0 == strcmp("canfd", interface_type));
 
   //add busoff error filter
   can_err_mask_t err_mask = CAN_ERR_MASK;
