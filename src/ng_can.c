@@ -61,7 +61,7 @@ static struct can_frame parse_can_frame(const char *req, int *req_index)
     struct can_frame can_frame = { 0 };
 
     int num_tuple_elements;
-    if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0 || num_tuple_elements != 2)
+    if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0)
       errx(EXIT_FAILURE, "Bad Tuple");
 
     unsigned long id;
@@ -83,7 +83,7 @@ static struct canfd_frame parse_canfd_frame(const char *req, int *req_index)
     struct canfd_frame canfd_frame = { 0 };
 
     int num_tuple_elements;
-    if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0 || num_tuple_elements != 2)
+    if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0)
       errx(EXIT_FAILURE, "Bad Tuple");
 
     unsigned long id;
