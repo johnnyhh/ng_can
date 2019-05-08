@@ -61,8 +61,21 @@ static struct can_frame parse_can_frame(const char *req, int *req_index)
     struct can_frame can_frame = { 0 };
 
     int num_tuple_elements;
-    if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0 || num_tuple_elements != 2)
-      errx(EXIT_FAILURE, "Bad Tuple");
+    int status = ei_decode_tuple_header(req, req_index, &num_tuple_elements);
+    if( status < 0 || num_tuple_elements != 2)
+    {
+      fprintf(stderr, "Bad Tuple diag:\n");
+      fprintf(stderr, "Status: %d\n", status);
+      fprintf(stderr, "Number of elements: %d\n", num_tuple_elements);
+
+      int i;
+      for (i = 0; i < num_tuple_elements; i++)
+      {
+        fprintf(stderr, "%d: %s\n", i, &req[req_index[i]]);
+      }
+
+      errx(EXIT_FAILURE, "Bad Tuple at line %d in file %s", __LINE__, __FILE__);
+    }
 
     unsigned long id;
     if(ei_decode_ulong(req, req_index, &id) < 0)
@@ -83,8 +96,21 @@ static struct canfd_frame parse_canfd_frame(const char *req, int *req_index)
     struct canfd_frame canfd_frame = { 0 };
 
     int num_tuple_elements;
-    if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0 || num_tuple_elements != 2)
-      errx(EXIT_FAILURE, "Bad Tuple");
+    int status = ei_decode_tuple_header(req, req_index, &num_tuple_elements);
+    if( status < 0 || num_tuple_elements != 2)
+    {
+      fprintf(stderr, "Bad Tuple diag:\n");
+      fprintf(stderr, "Status: %d\n", status);
+      fprintf(stderr, "Number of elements: %d\n", num_tuple_elements);
+
+      int i;
+      for (i = 0; i < num_tuple_elements; i++)
+      {
+        fprintf(stderr, "%d: %s\n", i, &req[req_index[i]]);
+      }
+
+      errx(EXIT_FAILURE, "Bad Tuple at line %d in file %s", __LINE__, __FILE__);
+    }
 
     unsigned long id;
     if(ei_decode_ulong(req, req_index, &id) < 0)
@@ -142,7 +168,7 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
       char err_str[ERR_STR_MAX_LEN] = { 0 };
       snprintf(err_str, ERR_STR_MAX_LEN, "write() error: %d", errno);
       send_error_notification(err_str);
-      errx(EXIT_FAILURE, err_str);
+      errx(EXIT_FAILURE, "%s", err_str);
     }
   }
 
@@ -228,7 +254,7 @@ static void notify_read()
     char err_str[ERR_STR_MAX_LEN];
     snprintf(err_str, ERR_STR_MAX_LEN, "read() error: %d", errno);
     send_error_notification(err_str);
-    errx(EXIT_FAILURE, err_str);
+    errx(EXIT_FAILURE, "%s", err_str);
   }
   ei_encode_empty_list(can_port->read_buffer, &resp_index);
   ei_encode_ulong(can_port->read_buffer, &resp_index, num_read);
