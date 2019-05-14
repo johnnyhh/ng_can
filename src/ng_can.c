@@ -61,8 +61,18 @@ static struct can_frame parse_can_frame(const char *req, int *req_index)
     struct can_frame can_frame = { 0 };
 
     int num_tuple_elements;
+    int myidx = *req_index;
     if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0 || num_tuple_elements != 2)
+    {
+      fprintf(stderr, "Bad Tuple:\r\n");
+
+      if (ei_print_term(stderr, req, &myidx) < 0)
+      {
+        fprintf(stderr, "Garbage detected\r\n");
+      }
+
       errx(EXIT_FAILURE, "Bad Tuple");
+    }
 
     unsigned long id;
     if(ei_decode_ulong(req, req_index, &id) < 0)
@@ -83,8 +93,18 @@ static struct canfd_frame parse_canfd_frame(const char *req, int *req_index)
     struct canfd_frame canfd_frame = { 0 };
 
     int num_tuple_elements;
+    int myidx = *req_index;
     if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0 || num_tuple_elements != 2)
+    {
+      fprintf(stderr, "Bad Tuple:\r\n");
+
+      if (ei_print_term(stderr, req, &myidx) < 0)
+      {
+        fprintf(stderr, "Garbage detected\r\n");
+      }
+
       errx(EXIT_FAILURE, "Bad Tuple");
+    }
 
     unsigned long id;
     if(ei_decode_ulong(req, req_index, &id) < 0)
@@ -142,7 +162,7 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
       char err_str[ERR_STR_MAX_LEN] = { 0 };
       snprintf(err_str, ERR_STR_MAX_LEN, "write() error: %d", errno);
       send_error_notification(err_str);
-      errx(EXIT_FAILURE, err_str);
+      errx(EXIT_FAILURE, "%s", err_str);
     }
   }
 
@@ -228,7 +248,7 @@ static void notify_read()
     char err_str[ERR_STR_MAX_LEN];
     snprintf(err_str, ERR_STR_MAX_LEN, "read() error: %d", errno);
     send_error_notification(err_str);
-    errx(EXIT_FAILURE, err_str);
+    errx(EXIT_FAILURE, "%s", err_str);
   }
   ei_encode_empty_list(can_port->read_buffer, &resp_index);
   ei_encode_ulong(can_port->read_buffer, &resp_index, num_read);
