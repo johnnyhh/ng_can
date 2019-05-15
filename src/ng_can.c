@@ -153,17 +153,12 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
     {
       //enqueue the remaining frames
       int num_unsent = num_frames - i;
-      if (can_port->write_buffer_size != 0)
-      {
-        warn("Throwing away buffered data.");
-        free(can_port->write_buffer);
-        can_port->write_buffer = NULL;
-      }
 
       can_port->write_buffer_size = num_unsent;
       int num_bytes = num_unsent * framesz;
       char *buffer = malloc(num_bytes);
       memcpy(buffer, req + this_frame_offset, num_bytes);
+      free(can_port->write_buffer);
       can_port->write_buffer = buffer;
 
       return -1;
@@ -171,6 +166,7 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
     else if(write_result < 0)
     {
       char err_str[ERR_STR_MAX_LEN] = { 0 };
+
       snprintf(err_str, ERR_STR_MAX_LEN, "write() error: %d", errno);
       send_error_notification(err_str);
       errx(EXIT_FAILURE, "%s", err_str);
