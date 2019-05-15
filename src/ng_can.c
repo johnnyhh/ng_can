@@ -96,11 +96,11 @@ static struct canfd_frame parse_canfd_frame(const char *req, int *req_index)
     int myidx = *req_index;
     if(ei_decode_tuple_header(req, req_index, &num_tuple_elements) < 0 || num_tuple_elements != 2)
     {
-      fprintf(stderr, "Bad Tuple:\r\n");
+      warn("Bad Tuple:");
 
       if (ei_print_term(stderr, req, &myidx) < 0)
       {
-        fprintf(stderr, "Garbage detected\r\n");
+        warn("Garbage detected.");
       }
 
       errx(EXIT_FAILURE, "Bad Tuple");
@@ -155,6 +155,7 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
       int num_unsent = num_frames - i;
       if (can_port->write_buffer_size != 0)
       {
+        warn("Throwing away buffered data.");
         free(can_port->write_buffer);
         can_port->write_buffer = NULL;
       }
