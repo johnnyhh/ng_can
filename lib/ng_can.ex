@@ -29,14 +29,14 @@ defmodule Ng.Can do
   end
 
   def write(pid, frames) when is_list(frames) do
-    GenServer.call(pid, {:write, pad_to_8_bytes(frames)})
+    GenServer.call(pid, {:write, frames})
   end
   def write(pid, frames) do
     write(pid, [frames])
   end
 
-  def open(pid, name, args \\[]) do
-    GenServer.call(pid, {:open, name, args})
+  def open(pid, name, type, args \\[]) do
+    GenServer.call(pid, {:open, name, type, args})
   end
 
   def await_read(pid) do
@@ -96,12 +96,9 @@ defmodule Ng.Can do
     %{state | rcvbuf: unsent, rcvbuf_len: num_remaining, awaiting_read: false}
   end
 
-  def handle_call({:open, interface, args}, {from_pid, _}, state) do
-    :os.cmd('ip link set #{interface} type can bitrate 250000 triple-sampling on restart-ms 100')
-    :os.cmd 'ip link set #{interface} up type can'
-    :os.cmd 'ifconfig #{interface} txqueuelen 1000'
+  def handle_call({:open, interface, type, args}, {from_pid, _}, state) do
     response = call_port(state, :open,
-                         {interface, args[:rcvbuf] || @default_bufsize,
+                         {interface, type, args[:rcvbuf] || @default_bufsize,
                            args[:sndbuf] || @default_bufsize
                          })
     {:reply, response, %{state | awaiting_process: from_pid, interface: interface}}
@@ -124,14 +121,6 @@ defmodule Ng.Can do
 
   def terminate(reason, state) do
     Logger.info "Ng.Can terminating with reason: #{inspect reason}"
-  end
-
-  defp pad_to_8_bytes(frames) do
-    Enum.map frames, fn {id, data} ->
-      bits_padding = (8 - byte_size(data)) * 8
-      padded_data = data <> <<0 :: size(bits_padding)>>
-      {id, padded_data}
-    end
   end
 
   defp call_port(state, command, arguments, timeout \\ 4000) do
