@@ -123,6 +123,10 @@ static struct canfd_frame parse_canfd_frame(const char *req, int *req_index)
 static int write_buffer(const char *req, int *req_index, int num_frames)
 {
   bool is_canfd = can_port->is_canfd;
+  static const int canfd_w_frame_sz = 78;
+  static const int can_w_frame_sz = 22;
+
+  int framesz = (is_canfd ? canfd_w_frame_sz : can_w_frame_sz);
 
   for (int i = 0; i < num_frames; i++)
   {
@@ -140,6 +144,11 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
       write_result = can_write(can_port, &can_frame);
     }
 
+    if (*req_index - this_frame_offset > framesz)
+    {
+      warn("Encoded frame size exceeded preset size.");
+    }
+
     if(write_result < 0 && (errno == EAGAIN || errno == ENOBUFS))
     {
       //enqueue the remaining frames
@@ -151,10 +160,11 @@ static int write_buffer(const char *req, int *req_index, int num_frames)
       }
 
       can_port->write_buffer_size = num_unsent;
-      int num_bytes = ENCODED_WRITE_FRAME_SIZE * num_unsent;
+      int num_bytes = num_unsent * framesz;
       char *buffer = malloc(num_bytes);
       memcpy(buffer, req + this_frame_offset, num_bytes);
       can_port->write_buffer = buffer;
+
       return -1;
     }
     else if(write_result < 0)

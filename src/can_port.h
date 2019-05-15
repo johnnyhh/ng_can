@@ -7,7 +7,6 @@
 #include <linux/can/error.h>
 #define MAX_READBUF 100
 #define ENCODED_READ_FRAME_SIZE 27
-#define ENCODED_WRITE_FRAME_SIZE 20
 
 struct can_port {
     // CAN file handle
