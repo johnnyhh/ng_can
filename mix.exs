@@ -35,6 +35,8 @@ defmodule Ng.Can.Mixfile do
   #
   # Type "mix help deps" for more examples and options
   defp deps do
-    [ {:elixir_make, "~> 0.3"} ]
+    [
+      {:elixir_make, "~> 0.3", runtime: false}
+    ]
   end
 end
